@@ -39,8 +39,10 @@ jobs:
     secrets: inherit
 
   #Publish without Commit ID. Publishes all artifacts that reside in the artifacts folder
+  # NOTE: Dev deployment disabled to keep dev environment untouched during full deployments
+  # Original condition was: if: ( github.event.inputs.COMMIT_ID_CHOICE == 'publish-all-artifacts-in-repo' )
   Push-Changes-To-APIM-Dev-Without-Commit-ID:
-    if: ( github.event.inputs.COMMIT_ID_CHOICE == 'publish-all-artifacts-in-repo' )
+    if: false  # Dev environment must remain untouched for full deployments
     needs: get-commit
     uses: ./.github/workflows/run-publisher-with-env.yaml
     with:
@@ -61,7 +63,9 @@ jobs:
 
   Push-Changes-To-APIM-Prod-Without-Commit-ID:
     if: ( github.event.inputs.COMMIT_ID_CHOICE == 'publish-all-artifacts-in-repo' )
-    needs: [get-commit, Push-Changes-To-APIM-Dev-Without-Commit-ID]
+    # NOTE: Removed dev dependency to allow prod deployment when dev is skipped
+    # Original was: needs: [get-commit, Push-Changes-To-APIM-Dev-Without-Commit-ID]
+    needs: [get-commit]
     uses: ./.github/workflows/run-publisher-with-env.yaml
     with:
       API_MANAGEMENT_ENVIRONMENT: prod # change this to match the prod environment created in settings
