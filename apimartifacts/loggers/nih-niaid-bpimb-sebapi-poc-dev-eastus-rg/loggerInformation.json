@@ -1,0 +1,10 @@
+{
+  "properties": {
+    "loggerType": "applicationInsights",
+    "credentials": {
+      "instrumentationKey": "{{Logger-Credentials--6671ebaafb42680790aa5618}}"
+    },
+    "isBuffered": true,
+    "resourceId": "/subscriptions/18fc6b8b-44fa-47d7-ae51-36766ac67165/resourceGroups/nih-niaid-bpimb-sebapi-poc-dev-eastus-rg_group/providers/microsoft.insights/components/nih-niaid-bpimb-sebapi-poc-dev-eastus-rg"
+  }
+}

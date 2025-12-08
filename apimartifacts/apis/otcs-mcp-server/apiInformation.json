@@ -1,0 +1,19 @@
+{
+  "properties": {
+    "path": "otcs-mcp",
+    "apiRevision": "1",
+    "authenticationSettings": {},
+    "description": "",
+    "isCurrent": true,
+    "displayName": "OTCS MCP Server",
+    "protocols": [
+      "https"
+    ],
+    "serviceUrl": "https://mcp-dev-hcb9gpgnh7g2dsc3.eastus2-01.azurewebsites.net",
+    "subscriptionKeyParameterNames": {
+      "header": "Ocp-Apim-Subscription-Key",
+      "query": "subscription-key"
+    },
+    "subscriptionRequired": false
+  }
+}

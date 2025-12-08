@@ -1,0 +1,8 @@
+{
+  "properties": {
+    "description": "nih-niaid-bpimb-mcp-opentext-wa",
+    "protocol": "http",
+    "resourceId": "https://management.azure.com/subscriptions/18fc6b8b-44fa-47d7-ae51-36766ac67165/resourceGroups/nih-niaid-azure-oaipoc-rg/providers/Microsoft.Web/sites/nih-niaid-bpimb-mcp-opentext-wa",
+    "url": "https://nih-niaid-bpimb-mcp-opentext-wa-dtg9h8fpc2cbeeb5.eastus2-01.azurewebsites.net"
+  }
+}

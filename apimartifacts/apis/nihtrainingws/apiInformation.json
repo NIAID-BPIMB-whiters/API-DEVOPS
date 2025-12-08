@@ -1,0 +1,19 @@
+{
+  "properties": {
+    "path": "nihtrainingws",
+    "apiRevision": "1",
+    "authenticationSettings": {},
+    "isCurrent": true,
+    "displayName": "NIHTrainingWS",
+    "protocols": [
+      "https"
+    ],
+    "serviceUrl": "https://soadev.nih.gov:443/Traininginfo/V3/TrainingDataV3.serviceagent",
+    "subscriptionKeyParameterNames": {
+      "header": "Ocp-Apim-Subscription-Key",
+      "query": "subscription-key"
+    },
+    "subscriptionRequired": true,
+    "type": "soap"
+  }
+}
