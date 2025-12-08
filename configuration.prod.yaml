@@ -4,8 +4,9 @@ loggers:
 diagnostics:
 backends:
 apis:
-  # Skip validation for NIH Training WS due to WSDL parsing errors
-  # Error: "Could not resolve type '{http://xmlns.example.com/1531343311835}requestBySAC'"
-  # This is a namespace mismatch issue in the WSDL schema definitions
-  nihtrainingws:
-    skipValidation: true  # Bypass WSDL validation to allow deployment
+  exclude:
+    # Exclude NIH Training WS API due to WSDL parsing errors during production deployment
+    # Error: "Could not resolve type '{http://xmlns.example.com/1531343311835}requestBySAC'"
+    # This is a namespace mismatch issue in the WSDL schema definitions that prevents deployment
+    - name: nihtrainingws
+      reason: "WSDL validation errors - namespace mismatch in schema definitions"
