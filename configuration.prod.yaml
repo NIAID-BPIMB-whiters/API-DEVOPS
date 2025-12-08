@@ -1,5 +1,15 @@
 apimServiceName: niaid-bpimb-apim-dev
 namedValues:
+  exclude:
+    # Exclude Key Vault-linked named values that require additional permissions
+    - name: NIHTrainingWSPassword
+      reason: "Key Vault access not available for production service principal"
+    - name: OTCSTICKET  
+      reason: "Key Vault access not available for production service principal"
+    - name: 6671ebaafb42680790aa5617
+      reason: "Key Vault access not available for production service principal"
+    - name: niaid-azure-oaipoc-api-fa-key
+      reason: "Key Vault access not available for production service principal"
 loggers:
 diagnostics:
 backends:
