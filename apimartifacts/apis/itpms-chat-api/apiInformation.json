@@ -1,0 +1,19 @@
+{
+  "properties": {
+    "path": "niaid-azure-oaipoc-api-fa",
+    "apiRevision": "1",
+    "authenticationSettings": {},
+    "description": "Import from \u0022niaid-azure-oaipoc-api-fa\u0022 Function App",
+    "isCurrent": true,
+    "displayName": "ITPMS Chat API",
+    "protocols": [
+      "https"
+    ],
+    "serviceUrl": "https://niaid-azure-oaipoc-api-fa.azurewebsites.net/api",
+    "subscriptionKeyParameterNames": {
+      "header": "Ocp-Apim-Subscription-Key",
+      "query": "subscription-key"
+    },
+    "subscriptionRequired": true
+  }
+}
