@@ -1,0 +1,97 @@
+openapi: 3.0.1
+info:
+  title: EDRMS-XDEV
+  description: ''
+  version: '1.0'
+servers:
+  - url: https://gateway.apimdev.niaid.nih.gov/opentext
+paths:
+  /livelink/livelink.exe/api/v1/ping:
+    get:
+      summary: PING
+      description: PING
+      operationId: ping
+      responses:
+        '200':
+          description: ''
+  '/livelink/livelink.exe/api/v2/nodes/{nodeid}/content':
+    get:
+      summary: DownloadDocument
+      description: DownloadDocument
+      operationId: downloaddocument
+      parameters:
+        - name: nodeid
+          in: path
+          required: true
+          schema:
+            type: ''
+      responses:
+        '200':
+          description: ''
+  '/livelink/livelink.exe/api/v2/nodes/{nodeid}/permissions/effective/{user_id}':
+    get:
+      summary: CheckNodePermsForUser
+      description: CheckNodePermsForUser
+      operationId: checknodepermsforuser
+      parameters:
+        - name: nodeid
+          in: path
+          required: true
+          schema:
+            type: ''
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: ''
+      responses:
+        '200':
+          description: ''
+  /livelink/livelink.exe/api/v2/members:
+    get:
+      summary: GetUserIDBySSO
+      description: GetUserIDBySSO
+      operationId: getuseridbysso
+      parameters:
+        - name: ssoname
+          in: query
+          required: true
+          schema:
+            type: ''
+      responses:
+        '200':
+          description: ''
+  /livelink/livelink.exe/api/v2/nodes/2000:
+    get:
+      summary: testoauthpolicy
+      description: testoauthpolicy
+      operationId: testoauthpolicy
+      responses:
+        '200':
+          description: ''
+  '/livelink/livelink.exe/api/v2/nodes/{nodeid}':
+    get:
+      summary: GetNodeDetails
+      operationId: getnodedetails
+      parameters:
+        - name: nodeid
+          in: path
+          required: true
+          schema:
+            type: ''
+      responses:
+        '200':
+          description: ''
+components:
+  securitySchemes:
+    apiKeyHeader:
+      type: apiKey
+      name: Ocp-Apim-Subscription-Key
+      in: header
+    apiKeyQuery:
+      type: apiKey
+      name: subscription-key
+      in: query
+security:
+  - apiKeyHeader: [ ]
+  - apiKeyQuery: [ ]

@@ -1,0 +1,9 @@
+{
+  "properties": {
+    "displayName": "MerlinWS",
+    "description": "This is the Product for Merlin Webservice",
+    "approvalRequired": false,
+    "state": "notPublished",
+    "subscriptionRequired": true
+  }
+}

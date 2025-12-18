@@ -1,0 +1,45 @@
+<!--
+    IMPORTANT:
+    - Policy elements can appear only within the <inbound>, <outbound>, <backend> section elements.
+    - To apply a policy to the incoming request (before it is forwarded to the backend service), place a corresponding policy element within the <inbound> section element.
+    - To apply a policy to the outgoing response (before it is sent back to the caller), place a corresponding policy element within the <outbound> section element.
+    - To add a policy, place the cursor at the desired insertion point and select a policy from the sidebar.
+    - To remove a policy, delete the corresponding policy statement from the policy document.
+    - Position the <base> element within a section element to inherit all policies from the corresponding section element in the enclosing scope.
+    - Remove the <base> element to prevent inheriting policies from the corresponding section element in the enclosing scope.
+    - Policies are applied in the order of their appearance, from the top down.
+    - Comments within policy elements are not supported and may disappear. Place your comments between policy elements or at a higher level scope.
+-->
+<policies>
+	<inbound>
+		<base />
+		<validate-jwt header-name="Authorization" failed-validation-httpcode="401" failed-validation-error-message="Unauthorized. Access token is missing or invalid." output-token-variable-name="valid-jwt">
+			<openid-config url="https://login.microsoftonline.com/14b77578-9773-42d5-8507-251ca2dc2b06/v2.0/.well-known/openid-configuration" />
+			<audiences>
+				<audience>93cb03ae-fa6f-4f74-ab6e-d4919cc1c2d5</audience>
+			</audiences>
+			<required-claims>
+				<claim name="azp" match="any">
+					<value>08e18876-6177-487e-b8b5-cf950c1e598c</value>
+					<value>8bccf209-0fcd-48cb-bf3e-be3f32cafd8b</value>
+				</claim>
+			</required-claims>
+		</validate-jwt>
+		<set-query-parameter name="username" exists-action="override">
+			<value>@{
+                    var jwt = context.Request.Headers.GetValueOrDefault("Authorization").AsJwt();
+                    var uid = jwt?.Claims.GetValueOrDefault("preferred_username") ?? "unknown";		
+                    return uid.Substring(0, uid.LastIndexOf("@"));
+                }</value>
+		</set-query-parameter>
+	</inbound>
+	<backend>
+		<base />
+	</backend>
+	<outbound>
+		<base />
+	</outbound>
+	<on-error>
+		<base />
+	</on-error>
+</policies>

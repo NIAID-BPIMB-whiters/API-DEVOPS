@@ -1,0 +1,295 @@
+openapi: 3.0.1
+info:
+  title: CRMS-API-QA
+  description: 'This is CRMS API QA instance (on-premise), which will be used by the SPO DAIDS Connect DEV and QA web parts to retrieve CRMS data. '
+  version: '1.0'
+servers:
+  - url: https://gateway.apimdev.niaid.nih.gov/crms-api-qa
+paths:
+  /sites/GetSites:
+    post:
+      tags:
+        - Sites
+      summary: GetSites
+      description: Method returns Site information based on logged-in user and filter criteria passed.
+      operationId: get-sites
+      parameters:
+        - name: filter
+          in: query
+          description: Filter for My Sites or All Sites.
+          required: true
+          schema:
+            type: string
+        - name: userName
+          in: query
+          description: Logged in User (User NIH AD Account name).
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+  /Alerts/GetAlerts:
+    post:
+      tags:
+        - Alerts
+      summary: GetAlerts
+      description: Method returns the notification alerts for the user
+      operationId: getalerts
+      parameters:
+        - name: username
+          in: query
+          description: User who is trying to call the method (User NIH AD Account name)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+  /DaidsStaffs/GetDaidsStaff:
+    post:
+      tags:
+        - DaidsStaff
+      summary: GetDaidsStaff
+      description: Method returns list of persons who are associated with DAIDS
+      operationId: getdaidsstaff
+      responses:
+        '200':
+          description: ''
+  /DaidsStaffs/GetPersonVCard:
+    post:
+      tags:
+        - DaidsStaff
+      summary: GetPersonVCard
+      description: Returns the Person vCard based on the DAIDS Staff Organization to Person ID.
+      operationId: getpersonvcard
+      parameters:
+        - name: EncryptedOrgToPersonId
+          in: query
+          description: DAIDS Staff Organization to Person ID (Encrypted)
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+  /DaidsStaffs/ExportDaidsStaff:
+    post:
+      tags:
+        - DaidsStaff
+      summary: ExportDaidsStaff
+      description: Exports the DAIDS Staff information in excel file based on the parameter passed
+      operationId: exportdaidsstaff
+      responses:
+        '200':
+          description: ''
+  /DaidsStaffs/FetchPhoto:
+    post:
+      tags:
+        - DaidsStaff
+      summary: FetchPhoto
+      description: Fetching the photo of the person based on DAIDS Staff Organization to Person ID
+      operationId: fetchphoto
+      parameters:
+        - name: EncryptedOrgToPersonId
+          in: query
+          description: DAIDS Staff Organization to Person ID (Encrypted).
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+  /protocols/GetProtocols:
+    post:
+      tags:
+        - Protocols
+      summary: GetProtocols
+      description: Method returns protocols for the user account
+      operationId: getprotocols
+      parameters:
+        - name: filter
+          in: query
+          description: 'Filter Criteria to get My Active Protocols or All My Protocols '
+          required: true
+          schema:
+            type: string
+        - name: userName
+          in: query
+          description: Logged in User (User NIH AD Account name).
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+  /protocols/GetProtocolSearchResults:
+    post:
+      tags:
+        - Protocols
+      summary: GetProtocolSearchResults
+      description: Method returns protocols based on filter criteria
+      operationId: getprotocolsearchresults
+      parameters:
+        - name: filter
+          in: query
+          description: 'Filter Criteria to Search Protocols based on Protocol Number, Protocol Title, IND Number and Study Intervention Number'
+          required: true
+          schema:
+            type: string
+        - name: userName
+          in: query
+          description: Logged in User (User NIH AD Account name).
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+  /RequiredActions/GetRequiredActions:
+    post:
+      tags:
+        - RequiredActions
+      summary: GetRequiredActions
+      description: Get required action.
+      operationId: getrequiredactions
+      parameters:
+        - name: canFetchAll
+          in: query
+          description: Flag for My Required Action or All Required Action Data
+          required: true
+          schema:
+            type: string
+        - name: userName
+          in: query
+          description: Logged in User (User NIH AD Account name).
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+  /Sites/ExportSites:
+    post:
+      tags:
+        - Sites
+      summary: ExportSites
+      description: Exports Sites information in excel file based on the parameter passed.
+      operationId: exportsites
+      parameters:
+        - name: filter
+          in: query
+          description: Filter for My Sites or All Sites.
+          required: true
+          schema:
+            type: string
+        - name: userName
+          in: query
+          description: Logged in User (User NIH AD Account name).
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+  /PerOrgSearch/SearchPerson:
+    post:
+      tags:
+        - PerOrgSearch
+      summary: SearchPerson
+      description: Method returns Person based on filter criteria passed.
+      operationId: searchperson
+      parameters:
+        - name: userName
+          in: query
+          description: Logged in User (User NIH AD Account name).
+          schema:
+            type: string
+        - name: filter
+          in: query
+          description: 'Filter can be applied on name, type, role, city, state, and country'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+  /PerOrgSearch/SearchOrganization:
+    post:
+      tags:
+        - PerOrgSearch
+      summary: SearchOrganization
+      description: Method returns Organization based on filter criteria passed.
+      operationId: searchorganization
+      parameters:
+        - name: userName
+          in: query
+          description: Logged in User (User NIH AD Account name).
+          schema:
+            type: string
+        - name: filter
+          in: query
+          description: 'Filter can be applied on name, organization/site id, city, state, and country'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+  /PerOrgSearch/ExportPerson:
+    post:
+      tags:
+        - PerOrgSearch
+      summary: ExportPerson
+      description: Exports the people data as excel file based on the parameter passed.
+      operationId: exportperson
+      parameters:
+        - name: filter
+          in: query
+          description: To search and export data
+          required: true
+          schema:
+            type: string
+        - name: username
+          in: query
+          description: Logged in User (User NIH AD Account name).
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+  /PerOrgSearch/ExportOrganization:
+    post:
+      tags:
+        - PerOrgSearch
+      summary: ExportOrganization
+      description: Exports the organization data as excel file based on the parameter passed.
+      operationId: exportorganization
+      parameters:
+        - name: filter
+          in: query
+          description: To search and export data.
+          required: true
+          schema:
+            type: string
+        - name: userName
+          in: query
+          description: Logged in User (User NIH AD Account name).
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+  /values:
+    get:
+      summary: CheckStatus
+      description: Endpoint to check status of CRMS API
+      operationId: checkstatus
+      responses:
+        '200':
+          description: ''
+components:
+  securitySchemes:
+    apiKeyHeader:
+      type: apiKey
+      name: Ocp-Apim-Subscription-Key
+      in: header
+    apiKeyQuery:
+      type: apiKey
+      name: subscription-key
+      in: query
+security:
+  - apiKeyHeader: [ ]
+  - apiKeyQuery: [ ]
