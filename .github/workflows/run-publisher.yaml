@@ -1,4 +1,4 @@
-name: Run - Publisher
+﻿name: Run - Publisher
 
 on:
   # Triggers the workflow on push events but only for the main branch
@@ -27,48 +27,28 @@ jobs:
         run: echo "commit_id=${GITHUB_SHA}" >> $GITHUB_OUTPUT
     outputs:
       commit_id: ${{ steps.commit.outputs.commit_id }}
-  #Publish with Commit ID
-  Push-Changes-To-APIM-Dev-With-Commit-ID:
+
+  #Deploy to PRODUCTION with Commit ID (only changed artifacts from last commit)
+  # Pipeline: DEV  Repository  PRODUCTION
+  Deploy-To-PROD-With-Commit-ID:
     if: (github.event.inputs.COMMIT_ID_CHOICE == 'publish-artifacts-in-last-commit' || github.event.inputs.COMMIT_ID_CHOICE == '')
     needs: get-commit
     uses: ./.github/workflows/run-publisher-with-env.yaml
     with:
-      API_MANAGEMENT_ENVIRONMENT: dev # change this to match the dev environment created in settings
+      API_MANAGEMENT_ENVIRONMENT: production # Deploys to PRODUCTION APIM service (niaid-bpimb-apim-dev)
       COMMIT_ID: ${{ needs.get-commit.outputs.commit_id }}
-      API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts # change this to the artifacts folder
+      CONFIGURATION_YAML_PATH: configuration.production.yaml # Production deployment configuration
+      API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts # Artifacts extracted from DEV environment
     secrets: inherit
 
-  #Publish without Commit ID. Publishes all artifacts that reside in the artifacts folder
-  # NOTE: Dev deployment disabled to keep dev environment untouched during full deployments
-  # Original condition was: if: ( github.event.inputs.COMMIT_ID_CHOICE == 'publish-all-artifacts-in-repo' )
-  Push-Changes-To-APIM-Dev-Without-Commit-ID:
-    if: false  # Dev environment must remain untouched for full deployments
-    needs: get-commit
-    uses: ./.github/workflows/run-publisher-with-env.yaml
-    with:
-      API_MANAGEMENT_ENVIRONMENT: dev # change this to match the dev environment created in settings
-      API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts # change this to the artifacts folder
-    secrets: inherit
-
-  Push-Changes-To-APIM-Prod-With-Commit-ID:
-    if: (github.event.inputs.COMMIT_ID_CHOICE == 'publish-artifacts-in-last-commit' || github.event.inputs.COMMIT_ID_CHOICE == '')
-    needs: [get-commit, Push-Changes-To-APIM-Dev-With-Commit-ID]
-    uses: ./.github/workflows/run-publisher-with-env.yaml
-    with:
-      API_MANAGEMENT_ENVIRONMENT: prod # change this to match the prod environment created in settings
-      CONFIGURATION_YAML_PATH: configuration.prod.yaml # make sure the file is available at the root
-      API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts # change this to the artifacts folder
-      COMMIT_ID: ${{ needs.get-commit.outputs.commit_id }}
-    secrets: inherit
-
-  Push-Changes-To-APIM-Prod-Without-Commit-ID:
+  #Deploy to PRODUCTION without Commit ID (all artifacts in repo)
+  # Use this option for full redeployment of all artifacts to PRODUCTION
+  Deploy-To-PROD-Without-Commit-ID:
     if: ( github.event.inputs.COMMIT_ID_CHOICE == 'publish-all-artifacts-in-repo' )
-    # NOTE: Removed dev dependency to allow prod deployment when dev is skipped
-    # Original was: needs: [get-commit, Push-Changes-To-APIM-Dev-Without-Commit-ID]
-    needs: [get-commit]
+    needs: get-commit
     uses: ./.github/workflows/run-publisher-with-env.yaml
     with:
-      API_MANAGEMENT_ENVIRONMENT: prod # change this to match the prod environment created in settings
-      CONFIGURATION_YAML_PATH: configuration.prod.yaml # make sure the file is available at the root
-      API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts # change this to the artifacts folder
+      API_MANAGEMENT_ENVIRONMENT: production # Deploys to PRODUCTION APIM service (niaid-bpimb-apim-dev)
+      CONFIGURATION_YAML_PATH: configuration.production.yaml # Production deployment configuration
+      API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts # All artifacts extracted from DEV environment
     secrets: inherit

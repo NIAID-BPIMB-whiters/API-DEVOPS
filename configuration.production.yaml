@@ -1,4 +1,13 @@
-apimServiceName: niaid-bpimb-apim-dev
+# =============================================================================
+# PRODUCTION DEPLOYMENT CONFIGURATION
+# =============================================================================
+# This configuration file is used by the publisher workflow to deploy 
+# extracted artifacts from DEV environment to PRODUCTION environment.
+#
+# Pipeline: DEV (nih-niaid-avidpoc-dev-rg) → Repository → PROD (niaid-bpimb-apim-dev-rg)
+# =============================================================================
+
+apimServiceName: niaid-bpimb-apim-dev  # PRODUCTION APIM Service
 namedValues:
 loggers:
 diagnostics:

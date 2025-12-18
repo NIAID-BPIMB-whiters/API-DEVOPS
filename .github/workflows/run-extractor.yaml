@@ -1,5 +1,9 @@
 name: Run - Extractor
 
+# PIPELINE: DEV → Repository → PRODUCTION
+# This workflow extracts APIM artifacts from DEV environment (nih-niaid-avidpoc-dev-rg)
+# Extracted artifacts are stored in apimartifacts/ folder for deployment to PRODUCTION
+
 on:
   workflow_dispatch:
     inputs:
