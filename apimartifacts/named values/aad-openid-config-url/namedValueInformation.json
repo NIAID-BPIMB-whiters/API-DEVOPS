@@ -1,0 +1,7 @@
+{
+  "properties": {
+    "displayName": "aad-openid-config-url",
+    "secret": false,
+    "value": "https://otdsext-xdev.niaid.nih.gov/otdsws/.well-known/openid-configuration"
+  }
+}
