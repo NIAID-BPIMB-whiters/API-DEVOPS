@@ -42,9 +42,10 @@ jobs:
   # =============================================================================
   # Configures environment-specific settings and determines which APIs to test
   # Outputs are used by subsequent test jobs
+  # Uses self-hosted runner for dev (internal network) or GitHub-hosted for prod
   # =============================================================================
   setup:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event.inputs.ENVIRONMENT == 'dev' && 'self-hosted' || 'ubuntu-latest' }}
     outputs:
       apim-gateway: ${{ steps.config.outputs.apim-gateway }}  # APIM gateway URL for the selected environment
       apis-to-test: ${{ steps.config.outputs.apis-to-test }}  # Comma-separated list of APIs to test
@@ -78,10 +79,11 @@ jobs:
   # =============================================================================
   # Quick test to verify the APIM gateway is responding
   # Tests the base gateway URL without hitting specific API endpoints
+  # Uses self-hosted runner for dev (internal network) or GitHub-hosted for prod
   # =============================================================================
   test-health-check:
     needs: setup
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event.inputs.ENVIRONMENT == 'dev' && 'self-hosted' || 'ubuntu-latest' }}
     # Only run if health-check or full-suite test type is selected
     if: ${{ github.event.inputs.TEST_TYPE == 'health-check' || github.event.inputs.TEST_TYPE == 'full-suite' }}
     environment: ${{ github.event.inputs.ENVIRONMENT }}
@@ -109,10 +111,11 @@ jobs:
   # Tests each API endpoint to verify it's accessible through the gateway
   # Uses matrix strategy to test multiple APIs in parallel
   # Reads API specification files to determine correct base paths
+  # Uses self-hosted runner for dev (internal network) or GitHub-hosted for prod
   # =============================================================================
   test-endpoint-availability:
     needs: setup
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event.inputs.ENVIRONMENT == 'dev' && 'self-hosted' || 'ubuntu-latest' }}
     # Only run if endpoint-availability or full-suite test type is selected
     if: ${{ github.event.inputs.TEST_TYPE == 'endpoint-availability' || github.event.inputs.TEST_TYPE == 'full-suite' }}
     environment: ${{ github.event.inputs.ENVIRONMENT }}
@@ -176,10 +179,11 @@ jobs:
   # Generates a summary report in GitHub Actions UI
   # Displays test results, environment info, and pass/fail status
   # Runs always, even if previous tests fail
+  # Uses self-hosted runner for dev (internal network) or GitHub-hosted for prod
   # =============================================================================
   test-summary:
     needs: [setup, test-health-check, test-endpoint-availability]
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event.inputs.ENVIRONMENT == 'dev' && 'self-hosted' || 'ubuntu-latest' }}
     # Always run summary, even if tests fail
     if: always()
     steps:
