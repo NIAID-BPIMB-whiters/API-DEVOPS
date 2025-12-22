@@ -72,7 +72,7 @@ jobs:
             # Test only the specified API
             "apis-to-test=${{ github.event.inputs.API_NAME }}" >> $env:GITHUB_OUTPUT
           }
-        shell: pwsh
+        shell: powershell
 
   # =============================================================================
   # HEALTH CHECK JOB
@@ -108,7 +108,7 @@ jobs:
             Write-Host "✗ APIM Gateway health check failed (HTTP $statusCode)"
             exit 1
           }
-        shell: pwsh
+        shell: powershell
 
   # =============================================================================
   # ENDPOINT AVAILABILITY TESTS
@@ -161,7 +161,7 @@ jobs:
             "base-path=/${{ matrix.api }}" >> $env:GITHUB_OUTPUT
             Write-Host "Using default base path: /${{ matrix.api }}"
           }
-        shell: pwsh
+        shell: powershell
       
       # Send HTTP request to API and verify it responds
       - name: Test API endpoint availability
@@ -188,7 +188,7 @@ jobs:
             Write-Host "✗ API endpoint test failed (HTTP $statusCode)"
             exit 1
           }
-        shell: pwsh
+        shell: powershell
 
   # =============================================================================
   # TEST SUMMARY JOB
@@ -228,4 +228,4 @@ jobs:
           } elseif ("${{ needs.test-endpoint-availability.result }}" -eq "failure") {
             "✗ Endpoint Availability: **Failed**" >> $env:GITHUB_STEP_SUMMARY
           }
-        shell: pwsh
+        shell: powershell
