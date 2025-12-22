@@ -55,7 +55,7 @@ jobs:
         id: config
         run: |
           # Set APIM gateway URL based on selected environment
-          if [ "${{ github.event.inputs.ENVIRONMENT }}" == "prod" ]; then
+          if [[ "${{ github.event.inputs.ENVIRONMENT }}" == "prod" ]]; then
             # Production APIM instance
             echo "apim-gateway=niaid-bpimb-apim-dev.azure-api.net" >> $GITHUB_OUTPUT
           else
