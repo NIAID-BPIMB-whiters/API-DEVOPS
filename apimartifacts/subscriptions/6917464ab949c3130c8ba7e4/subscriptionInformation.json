@@ -1,0 +1,8 @@
+{
+  "properties": {
+    "scope": "/subscriptions/18fc6b8b-44fa-47d7-ae51-36766ac67165/resourceGroups/nih-niaid-avidpoc-dev-rg/providers/Microsoft.ApiManagement/service/apim-daids-connect/products/merlinws",
+    "allowTracing": false,
+    "ownerId": "/subscriptions/18fc6b8b-44fa-47d7-ae51-36766ac67165/resourceGroups/nih-niaid-avidpoc-dev-rg/providers/Microsoft.ApiManagement/service/apim-daids-connect/users/1",
+    "state": "active"
+  }
+}
