@@ -147,6 +147,25 @@ jobs:
           Write-Information "Execution complete."
         shell: pwsh
 
+      - name: Remove ownerId from subscription files
+        run: |
+          Write-Information "Removing ownerId from subscription files to prevent user-specific ownership in production..."
+          
+          $subscriptionFiles = Get-ChildItem -Path "${{ GITHUB.WORKSPACE }}/apimartifacts/subscriptions" -Filter "subscriptionInformation.json" -Recurse
+          
+          foreach ($file in $subscriptionFiles) {
+            $content = Get-Content -Path $file.FullName -Raw | ConvertFrom-Json
+            
+            if ($content.properties.PSObject.Properties.Name -contains 'ownerId') {
+              Write-Information "Removing ownerId from $($file.FullName)"
+              $content.properties.PSObject.Properties.Remove('ownerId')
+              $content | ConvertTo-Json -Depth 10 | Set-Content -Path $file.FullName -NoNewline
+            }
+          }
+          
+          Write-Information "ownerId removal complete."
+        shell: pwsh
+
       - name: publish artifact
         uses: actions/upload-artifact@v4
         env:
