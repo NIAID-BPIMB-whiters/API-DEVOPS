@@ -1,0 +1,67 @@
+# =============================================================================
+# EXTRACTOR CONFIGURATION
+# =============================================================================
+# This configuration file controls which artifacts are extracted from the 
+# DEV environment. Use this to selectively extract specific APIs or artifacts
+# instead of extracting everything.
+#
+# When this file is used, only the artifacts specified here will be extracted.
+# =============================================================================
+
+apimServiceName: apim-daids-connect  # DEV APIM Service Name
+
+# =============================================================================
+# API EXTRACTION CONFIGURATION
+# =============================================================================
+# Specify which APIs to extract. If this section is omitted or commented out,
+# ALL APIs will be extracted.
+# =============================================================================
+
+apis:
+  # Extract specific APIs by name
+  - name: crms-api-qa
+  - name: demo-conference-api
+  - name: echo-api
+  - name: itpms-chat-api
+  - name: merlin-db
+  - name: opentext
+  - name: otcs-mcp-server
+  - name: test
+  # Add more APIs as needed
+
+# =============================================================================
+# ADDITIONAL ARTIFACT EXTRACTION
+# =============================================================================
+# Uncomment and configure these sections to extract other artifacts
+# =============================================================================
+
+# namedValues:
+#   # Extract all named values or specify individual ones
+#   # - name: aad-openid-config-url
+#   # - name: aad-token-issuer
+
+# products:
+#   # Extract specific products
+#   - name: starter
+#   - name: unlimited
+#   - name: merlinws
+
+# backends:
+#   # Extract specific backends
+#   # - name: niaid-azure-oaipoc-api-fa
+
+# tags:
+#   # Extract specific tags
+#   # - name: dev-68e489d37aa79a36aa666e61
+
+# gateways:
+#   # Extract specific gateways
+#   # - name: NIAID_CRMS_Test
+
+# =============================================================================
+# NOTES
+# =============================================================================
+# - If a section is commented out or omitted, those artifacts won't be extracted
+# - To extract everything, use "Extract All APIs" option in the workflow instead
+# - Secret named values will not include actual values (by design for security)
+# =============================================================================
