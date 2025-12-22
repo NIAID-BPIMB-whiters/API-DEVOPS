@@ -1,0 +1,210 @@
+name: Test - APIs
+
+# =============================================================================
+# API TESTING WORKFLOW
+# =============================================================================
+# This workflow tests API functionality in different environments (dev/prod)
+# Validates that APIs are reachable and responding correctly through APIM
+# =============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      ENVIRONMENT:
+        description: 'Environment to test'
+        required: true
+        type: choice
+        options:
+          - dev    # Tests against dev APIM (apim-daids-connect)
+          - prod   # Tests against prod APIM (niaid-bpimb-apim-dev)
+      API_NAME:
+        description: 'API to test (leave empty to test all APIs)'
+        required: false
+        type: string
+      TEST_TYPE:
+        description: 'Type of test to run'
+        required: true
+        type: choice
+        default: 'health-check'
+        options:
+          - health-check           # Quick gateway availability check
+          - endpoint-availability  # Tests all API endpoints are reachable
+          - full-suite            # Runs all available tests
+
+env:
+  # Complete list of APIs extracted from dev environment
+  # Used when no specific API is provided in API_NAME input
+  ALL_APIS: "crms-api-qa,demo-conference-api,echo-api,itpms-chat-api,merlin-db,opentext,otcs-mcp-server,test"
+
+jobs:
+  # =============================================================================
+  # SETUP JOB
+  # =============================================================================
+  # Configures environment-specific settings and determines which APIs to test
+  # Outputs are used by subsequent test jobs
+  # =============================================================================
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      apim-gateway: ${{ steps.config.outputs.apim-gateway }}  # APIM gateway URL for the selected environment
+      apis-to-test: ${{ steps.config.outputs.apis-to-test }}  # Comma-separated list of APIs to test
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Configure environment settings
+        id: config
+        run: |
+          # Set APIM gateway URL based on selected environment
+          if [ "${{ github.event.inputs.ENVIRONMENT }}" == "prod" ]; then
+            # Production APIM instance
+            echo "apim-gateway=niaid-bpimb-apim-dev.azure-api.net" >> $GITHUB_OUTPUT
+          else
+            # Development APIM instance (default)
+            echo "apim-gateway=apim-daids-connect.azure-api.net" >> $GITHUB_OUTPUT
+          fi
+          
+          # Determine which APIs to test
+          if [ -z "${{ github.event.inputs.API_NAME }}" ]; then
+            # No specific API provided - test all APIs
+            echo "apis-to-test=${{ env.ALL_APIS }}" >> $GITHUB_OUTPUT
+          else
+            # Test only the specified API
+            echo "apis-to-test=${{ github.event.inputs.API_NAME }}" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+
+  # =============================================================================
+  # HEALTH CHECK JOB
+  # =============================================================================
+  # Quick test to verify the APIM gateway is responding
+  # Tests the base gateway URL without hitting specific API endpoints
+  # =============================================================================
+  test-health-check:
+    needs: setup
+    runs-on: ubuntu-latest
+    # Only run if health-check or full-suite test type is selected
+    if: ${{ github.event.inputs.TEST_TYPE == 'health-check' || github.event.inputs.TEST_TYPE == 'full-suite' }}
+    environment: ${{ github.event.inputs.ENVIRONMENT }}
+    steps:
+      - name: Test APIM Gateway Health
+        run: |
+          echo "Testing APIM Gateway: ${{ needs.setup.outputs.apim-gateway }}"
+          
+          # Send HTTP request to gateway and capture response code
+          response=$(curl -s -o /dev/null -w "%{http_code}" https://${{ needs.setup.outputs.apim-gateway }})
+          
+          # Gateway is healthy if it responds with common HTTP codes
+          # 404, 401, 403 are expected since we're not providing API path or credentials
+          if [ "$response" == "404" ] || [ "$response" == "401" ] || [ "$response" == "403" ]; then
+            echo "✓ APIM Gateway is responding (HTTP $response)"
+          else
+            echo "✗ APIM Gateway health check failed (HTTP $response)"
+            exit 1
+          fi
+        shell: bash
+
+  # =============================================================================
+  # ENDPOINT AVAILABILITY TESTS
+  # =============================================================================
+  # Tests each API endpoint to verify it's accessible through the gateway
+  # Uses matrix strategy to test multiple APIs in parallel
+  # Reads API specification files to determine correct base paths
+  # =============================================================================
+  test-endpoint-availability:
+    needs: setup
+    runs-on: ubuntu-latest
+    # Only run if endpoint-availability or full-suite test type is selected
+    if: ${{ github.event.inputs.TEST_TYPE == 'endpoint-availability' || github.event.inputs.TEST_TYPE == 'full-suite' }}
+    environment: ${{ github.event.inputs.ENVIRONMENT }}
+    strategy:
+      matrix:
+        # Create parallel jobs for each API from setup output
+        # Converts comma-separated string to JSON array format
+        api: ${{ fromJson(format('["{0}"]', needs.setup.outputs.apis-to-test)) }}
+      # Don't cancel remaining tests if one fails
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+      
+      # Extract base path from API specification file
+      # Each API may have a different base URL pattern
+      - name: Get API base path
+        id: api-info
+        run: |
+          # Read API specification to get base path
+          spec_file="apimartifacts/apis/${{ matrix.api }}/specification.yaml"
+          
+          if [ -f "$spec_file" ]; then
+            # Extract base path from OpenAPI spec (basic parsing)
+            # Looks for "url:" field and removes hostname, variables
+            base_path=$(grep -m 1 "^  - url:" "$spec_file" | sed 's/.*url: *//; s/"//g; s/https:\/\/[^/]*//; s/{[^}]*}//g' || echo "/${{ matrix.api }}")
+            echo "base-path=$base_path" >> $GITHUB_OUTPUT
+            echo "API base path: $base_path"
+          else
+            # Fall back to API name as path if spec not found
+            echo "base-path=/${{ matrix.api }}" >> $GITHUB_OUTPUT
+            echo "Using default base path: /${{ matrix.api }}"
+          fi
+        shell: bash
+      
+      # Send HTTP request to API and verify it responds
+      - name: Test API endpoint availability
+        run: |
+          echo "Testing API: ${{ matrix.api }}"
+          echo "Gateway: https://${{ needs.setup.outputs.apim-gateway }}${{ steps.api-info.outputs.base-path }}"
+          
+          # Send request and capture HTTP response code
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            https://${{ needs.setup.outputs.apim-gateway }}${{ steps.api-info.outputs.base-path }})
+          
+          echo "Response code: $response"
+          
+          # Accept any response that indicates API is reachable
+          # 200: Success, 401: Auth required, 403: Forbidden, 404: Method not found
+          # These codes indicate the API gateway is routing requests correctly
+          if [ "$response" == "200" ] || [ "$response" == "401" ] || [ "$response" == "403" ] || [ "$response" == "404" ]; then
+            echo "✓ API endpoint is reachable"
+          else
+            echo "✗ API endpoint test failed (HTTP $response)"
+            exit 1
+          fi
+        shell: bash
+
+  # =============================================================================
+  # TEST SUMMARY JOB
+  # =============================================================================
+  # Generates a summary report in GitHub Actions UI
+  # Displays test results, environment info, and pass/fail status
+  # Runs always, even if previous tests fail
+  # =============================================================================
+  test-summary:
+    needs: [setup, test-health-check, test-endpoint-availability]
+    runs-on: ubuntu-latest
+    # Always run summary, even if tests fail
+    if: always()
+    steps:
+      - name: Generate test summary
+        run: |
+          # Create formatted summary in GitHub Actions step summary UI
+          echo "## API Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ github.event.inputs.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Gateway:** ${{ needs.setup.outputs.apim-gateway }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Test Type:** ${{ github.event.inputs.TEST_TYPE }}" >> $GITHUB_STEP_SUMMARY
+          echo "**APIs Tested:** ${{ needs.setup.outputs.apis-to-test }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Display health check result if it ran
+          if [ "${{ needs.test-health-check.result }}" == "success" ]; then
+            echo "✓ Health Check: **Passed**" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.test-health-check.result }}" == "failure" ]; then
+            echo "✗ Health Check: **Failed**" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Display endpoint availability result if it ran
+          if [ "${{ needs.test-endpoint-availability.result }}" == "success" ]; then
+            echo "✓ Endpoint Availability: **Passed**" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.test-endpoint-availability.result }}" == "failure" ]; then
+            echo "✗ Endpoint Availability: **Failed**" >> $GITHUB_STEP_SUMMARY
+          fi
+        shell: bash
