@@ -72,7 +72,7 @@ jobs:
             # Test only the specified API
             "apis-to-test=${{ github.event.inputs.API_NAME }}" >> $env:GITHUB_OUTPUT
           }
-        shell: powershell
+        shell: pwsh
 
   # =============================================================================
   # HEALTH CHECK JOB
@@ -97,7 +97,13 @@ jobs:
             $response = Invoke-WebRequest -Uri https://${{ needs.setup.outputs.apim-gateway }} -Method Get -UseBasicParsing -ErrorAction SilentlyContinue
             $statusCode = $response.StatusCode
           } catch {
-            $statusCode = $_.Exception.Response.StatusCode.value__
+            if ($_.Exception.Response) {
+              $statusCode = $_.Exception.Response.StatusCode.value__
+            } else {
+              # DNS or network error
+              Write-Host "[FAIL] Cannot reach APIM gateway - DNS/network error: $($_.Exception.Message)"
+              exit 1
+            }
           }
           
           # Gateway is healthy if it responds with common HTTP codes
@@ -108,7 +114,7 @@ jobs:
             Write-Host "[FAIL] APIM Gateway health check failed (HTTP $statusCode)"
             exit 1
           }
-        shell: powershell
+        shell: pwsh
 
   # =============================================================================
   # ENDPOINT AVAILABILITY TESTS
@@ -161,7 +167,7 @@ jobs:
             "base-path=/${{ matrix.api }}" >> $env:GITHUB_OUTPUT
             Write-Host "Using default base path: /${{ matrix.api }}"
           }
-        shell: powershell
+        shell: pwsh
       
       # Send HTTP request to API and verify it responds
       - name: Test API endpoint availability
@@ -188,7 +194,7 @@ jobs:
             Write-Host "[FAIL] API endpoint test failed (HTTP $statusCode)"
             exit 1
           }
-        shell: powershell
+        shell: pwsh
 
   # =============================================================================
   # TEST SUMMARY JOB
@@ -228,4 +234,4 @@ jobs:
           } elseif ("${{ needs.test-endpoint-availability.result }}" -eq "failure") {
             "[FAIL] Endpoint Availability: **Failed**" >> $env:GITHUB_STEP_SUMMARY
           }
-        shell: powershell
+        shell: pwsh
