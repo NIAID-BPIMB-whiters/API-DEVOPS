@@ -103,9 +103,9 @@ jobs:
           # Gateway is healthy if it responds with common HTTP codes
           # 404, 401, 403 are expected since we're not providing API path or credentials
           if ($statusCode -in @(404, 401, 403)) {
-            Write-Host "✓ APIM Gateway is responding (HTTP $statusCode)"
+            Write-Host "[OK] APIM Gateway is responding (HTTP $statusCode)"
           } else {
-            Write-Host "✗ APIM Gateway health check failed (HTTP $statusCode)"
+            Write-Host "[FAIL] APIM Gateway health check failed (HTTP $statusCode)"
             exit 1
           }
         shell: powershell
@@ -183,9 +183,9 @@ jobs:
           # 200: Success, 401: Auth required, 403: Forbidden, 404: Method not found
           # These codes indicate the API gateway is routing requests correctly
           if ($statusCode -in @(200, 401, 403, 404)) {
-            Write-Host "✓ API endpoint is reachable"
+            Write-Host "[OK] API endpoint is reachable"
           } else {
-            Write-Host "✗ API endpoint test failed (HTTP $statusCode)"
+            Write-Host "[FAIL] API endpoint test failed (HTTP $statusCode)"
             exit 1
           }
         shell: powershell
@@ -217,15 +217,15 @@ jobs:
           
           # Display health check result if it ran
           if ("${{ needs.test-health-check.result }}" -eq "success") {
-            "✓ Health Check: **Passed**" >> $env:GITHUB_STEP_SUMMARY
+            "[OK] Health Check: **Passed**" >> $env:GITHUB_STEP_SUMMARY
           } elseif ("${{ needs.test-health-check.result }}" -eq "failure") {
-            "✗ Health Check: **Failed**" >> $env:GITHUB_STEP_SUMMARY
+            "[FAIL] Health Check: **Failed**" >> $env:GITHUB_STEP_SUMMARY
           }
           
           # Display endpoint availability result if it ran
           if ("${{ needs.test-endpoint-availability.result }}" -eq "success") {
-            "✓ Endpoint Availability: **Passed**" >> $env:GITHUB_STEP_SUMMARY
+            "[OK] Endpoint Availability: **Passed**" >> $env:GITHUB_STEP_SUMMARY
           } elseif ("${{ needs.test-endpoint-availability.result }}" -eq "failure") {
-            "✗ Endpoint Availability: **Failed**" >> $env:GITHUB_STEP_SUMMARY
+            "[FAIL] Endpoint Availability: **Failed**" >> $env:GITHUB_STEP_SUMMARY
           }
         shell: powershell
