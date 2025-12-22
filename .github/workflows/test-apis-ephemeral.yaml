@@ -74,7 +74,7 @@ jobs:
             RG="nih-niaid-avidpoc-dev-rg"
             VNET_RG="nih-niaid-azurestrides-dev-rg-admin-az"
             VNET="nih-niaid-azurestrides-dev-apim-az"
-            SUBNET="niaid-apim"
+            SUBNET="niaid-commonservices-test"  # Using common services subnet instead of delegated APIM subnet
           fi
           
           echo "Creating VM: $VM_NAME in $RG (VNet: $VNET in $VNET_RG)"
