@@ -56,23 +56,23 @@ jobs:
         id: config
         run: |
           # Set APIM gateway URL based on selected environment
-          if [[ "${{ github.event.inputs.ENVIRONMENT }}" == "prod" ]]; then
+          if ("${{ github.event.inputs.ENVIRONMENT }}" -eq "prod") {
             # Production APIM instance
-            echo "apim-gateway=niaid-bpimb-apim-dev.azure-api.net" >> $GITHUB_OUTPUT
-          else
+            "apim-gateway=niaid-bpimb-apim-dev.azure-api.net" >> $env:GITHUB_OUTPUT
+          } else {
             # Development APIM instance (default)
-            echo "apim-gateway=apim-daids-connect.azure-api.net" >> $GITHUB_OUTPUT
-          fi
+            "apim-gateway=apim-daids-connect.azure-api.net" >> $env:GITHUB_OUTPUT
+          }
           
           # Determine which APIs to test
-          if [ -z "${{ github.event.inputs.API_NAME }}" ]; then
+          if ([string]::IsNullOrEmpty("${{ github.event.inputs.API_NAME }}")) {
             # No specific API provided - test all APIs
-            echo "apis-to-test=${{ env.ALL_APIS }}" >> $GITHUB_OUTPUT
-          else
+            "apis-to-test=${{ env.ALL_APIS }}" >> $env:GITHUB_OUTPUT
+          } else {
             # Test only the specified API
-            echo "apis-to-test=${{ github.event.inputs.API_NAME }}" >> $GITHUB_OUTPUT
-          fi
-        shell: bash
+            "apis-to-test=${{ github.event.inputs.API_NAME }}" >> $env:GITHUB_OUTPUT
+          }
+        shell: pwsh
 
   # =============================================================================
   # HEALTH CHECK JOB
@@ -90,20 +90,25 @@ jobs:
     steps:
       - name: Test APIM Gateway Health
         run: |
-          echo "Testing APIM Gateway: ${{ needs.setup.outputs.apim-gateway }}"
+          Write-Host "Testing APIM Gateway: ${{ needs.setup.outputs.apim-gateway }}"
           
           # Send HTTP request to gateway and capture response code
-          response=$(curl -s -o /dev/null -w "%{http_code}" https://${{ needs.setup.outputs.apim-gateway }})
+          try {
+            $response = Invoke-WebRequest -Uri https://${{ needs.setup.outputs.apim-gateway }} -Method Get -UseBasicParsing -ErrorAction SilentlyContinue
+            $statusCode = $response.StatusCode
+          } catch {
+            $statusCode = $_.Exception.Response.StatusCode.value__
+          }
           
           # Gateway is healthy if it responds with common HTTP codes
           # 404, 401, 403 are expected since we're not providing API path or credentials
-          if [ "$response" == "404" ] || [ "$response" == "401" ] || [ "$response" == "403" ]; then
-            echo "✓ APIM Gateway is responding (HTTP $response)"
-          else
-            echo "✗ APIM Gateway health check failed (HTTP $response)"
+          if ($statusCode -in @(404, 401, 403)) {
+            Write-Host "✓ APIM Gateway is responding (HTTP $statusCode)"
+          } else {
+            Write-Host "✗ APIM Gateway health check failed (HTTP $statusCode)"
             exit 1
-          fi
-        shell: bash
+          }
+        shell: pwsh
 
   # =============================================================================
   # ENDPOINT AVAILABILITY TESTS
@@ -135,43 +140,55 @@ jobs:
         id: api-info
         run: |
           # Read API specification to get base path
-          spec_file="apimartifacts/apis/${{ matrix.api }}/specification.yaml"
+          $specFile = "apimartifacts/apis/${{ matrix.api }}/specification.yaml"
           
-          if [ -f "$spec_file" ]; then
+          if (Test-Path $specFile) {
             # Extract base path from OpenAPI spec (basic parsing)
-            # Looks for "url:" field and removes hostname, variables
-            base_path=$(grep -m 1 "^  - url:" "$spec_file" | sed 's/.*url: *//; s/"//g; s/https:\/\/[^/]*//; s/{[^}]*}//g' || echo "/${{ matrix.api }}")
-            echo "base-path=$base_path" >> $GITHUB_OUTPUT
-            echo "API base path: $base_path"
-          else
+            $content = Get-Content $specFile -Raw
+            if ($content -match '- url:\s*(.+)') {
+              $url = $matches[1].Trim('"')
+              # Remove hostname and variables
+              $basePath = $url -replace 'https?://[^/]*', '' -replace '\{[^}]*\}', ''
+              if ([string]::IsNullOrEmpty($basePath)) { $basePath = "/${{ matrix.api }}" }
+              "base-path=$basePath" >> $env:GITHUB_OUTPUT
+              Write-Host "API base path: $basePath"
+            } else {
+              "base-path=/${{ matrix.api }}" >> $env:GITHUB_OUTPUT
+              Write-Host "Using default base path: /${{ matrix.api }}"
+            }
+          } else {
             # Fall back to API name as path if spec not found
-            echo "base-path=/${{ matrix.api }}" >> $GITHUB_OUTPUT
-            echo "Using default base path: /${{ matrix.api }}"
-          fi
-        shell: bash
+            "base-path=/${{ matrix.api }}" >> $env:GITHUB_OUTPUT
+            Write-Host "Using default base path: /${{ matrix.api }}"
+          }
+        shell: pwsh
       
       # Send HTTP request to API and verify it responds
       - name: Test API endpoint availability
         run: |
-          echo "Testing API: ${{ matrix.api }}"
-          echo "Gateway: https://${{ needs.setup.outputs.apim-gateway }}${{ steps.api-info.outputs.base-path }}"
+          Write-Host "Testing API: ${{ matrix.api }}"
+          Write-Host "Gateway: https://${{ needs.setup.outputs.apim-gateway }}${{ steps.api-info.outputs.base-path }}"
           
           # Send request and capture HTTP response code
-          response=$(curl -s -o /dev/null -w "%{http_code}" \
-            https://${{ needs.setup.outputs.apim-gateway }}${{ steps.api-info.outputs.base-path }})
+          try {
+            $response = Invoke-WebRequest -Uri "https://${{ needs.setup.outputs.apim-gateway }}${{ steps.api-info.outputs.base-path }}" -Method Get -UseBasicParsing -ErrorAction SilentlyContinue
+            $statusCode = $response.StatusCode
+          } catch {
+            $statusCode = $_.Exception.Response.StatusCode.value__
+          }
           
-          echo "Response code: $response"
+          Write-Host "Response code: $statusCode"
           
           # Accept any response that indicates API is reachable
           # 200: Success, 401: Auth required, 403: Forbidden, 404: Method not found
           # These codes indicate the API gateway is routing requests correctly
-          if [ "$response" == "200" ] || [ "$response" == "401" ] || [ "$response" == "403" ] || [ "$response" == "404" ]; then
-            echo "✓ API endpoint is reachable"
-          else
-            echo "✗ API endpoint test failed (HTTP $response)"
+          if ($statusCode -in @(200, 401, 403, 404)) {
+            Write-Host "✓ API endpoint is reachable"
+          } else {
+            Write-Host "✗ API endpoint test failed (HTTP $statusCode)"
             exit 1
-          fi
-        shell: bash
+          }
+        shell: pwsh
 
   # =============================================================================
   # TEST SUMMARY JOB
@@ -190,25 +207,25 @@ jobs:
       - name: Generate test summary
         run: |
           # Create formatted summary in GitHub Actions step summary UI
-          echo "## API Test Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Environment:** ${{ github.event.inputs.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Gateway:** ${{ needs.setup.outputs.apim-gateway }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Test Type:** ${{ github.event.inputs.TEST_TYPE }}" >> $GITHUB_STEP_SUMMARY
-          echo "**APIs Tested:** ${{ needs.setup.outputs.apis-to-test }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          "## API Test Results" >> $env:GITHUB_STEP_SUMMARY
+          "" >> $env:GITHUB_STEP_SUMMARY
+          "**Environment:** ${{ github.event.inputs.ENVIRONMENT }}" >> $env:GITHUB_STEP_SUMMARY
+          "**Gateway:** ${{ needs.setup.outputs.apim-gateway }}" >> $env:GITHUB_STEP_SUMMARY
+          "**Test Type:** ${{ github.event.inputs.TEST_TYPE }}" >> $env:GITHUB_STEP_SUMMARY
+          "**APIs Tested:** ${{ needs.setup.outputs.apis-to-test }}" >> $env:GITHUB_STEP_SUMMARY
+          "" >> $env:GITHUB_STEP_SUMMARY
           
           # Display health check result if it ran
-          if [ "${{ needs.test-health-check.result }}" == "success" ]; then
-            echo "✓ Health Check: **Passed**" >> $GITHUB_STEP_SUMMARY
-          elif [ "${{ needs.test-health-check.result }}" == "failure" ]; then
-            echo "✗ Health Check: **Failed**" >> $GITHUB_STEP_SUMMARY
-          fi
+          if ("${{ needs.test-health-check.result }}" -eq "success") {
+            "✓ Health Check: **Passed**" >> $env:GITHUB_STEP_SUMMARY
+          } elseif ("${{ needs.test-health-check.result }}" -eq "failure") {
+            "✗ Health Check: **Failed**" >> $env:GITHUB_STEP_SUMMARY
+          }
           
           # Display endpoint availability result if it ran
-          if [ "${{ needs.test-endpoint-availability.result }}" == "success" ]; then
-            echo "✓ Endpoint Availability: **Passed**" >> $GITHUB_STEP_SUMMARY
-          elif [ "${{ needs.test-endpoint-availability.result }}" == "failure" ]; then
-            echo "✗ Endpoint Availability: **Failed**" >> $GITHUB_STEP_SUMMARY
-          fi
-        shell: bash
+          if ("${{ needs.test-endpoint-availability.result }}" -eq "success") {
+            "✓ Endpoint Availability: **Passed**" >> $env:GITHUB_STEP_SUMMARY
+          } elseif ("${{ needs.test-endpoint-availability.result }}" -eq "failure") {
+            "✗ Endpoint Availability: **Failed**" >> $env:GITHUB_STEP_SUMMARY
+          }
+        shell: pwsh
