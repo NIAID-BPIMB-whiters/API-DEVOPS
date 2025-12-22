@@ -1,0 +1,226 @@
+# =============================================================================
+# API TESTING WORKFLOW - EPHEMERAL VM APPROACH
+# =============================================================================
+# This workflow tests API functionality using a temporary Azure VM
+# The VM is created in the internal VNet, runs tests, then is destroyed
+# This allows testing of internal APIM endpoints without persistent runners
+# =============================================================================
+
+name: Test - APIs (Ephemeral)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ENVIRONMENT:
+        description: 'Environment to test (dev or prod)'
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+        default: 'prod'
+      TEST_TYPE:
+        description: 'Type of test to run'
+        required: true
+        type: choice
+        options:
+          - health-check
+          - endpoint-availability
+          - full-suite
+        default: 'health-check'
+      API_NAME:
+        description: 'Specific API to test (leave empty for all)'
+        required: false
+        type: string
+
+env:
+  ALL_APIS: crms-api-qa,demo-conference-api,echo-api,itpms-chat-api,merlin-db,opentext,otcs-mcp-server,test
+
+jobs:
+  # =============================================================================
+  # CREATE TEST VM JOB
+  # =============================================================================
+  # Creates a temporary Azure VM in the internal VNet for testing
+  # =============================================================================
+  create-test-vm:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.ENVIRONMENT }}
+    outputs:
+      vm-name: ${{ steps.create-vm.outputs.vm-name }}
+      vm-ip: ${{ steps.create-vm.outputs.vm-ip }}
+      resource-group: ${{ steps.create-vm.outputs.resource-group }}
+    steps:
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Create ephemeral test VM
+        id: create-vm
+        run: |
+          # Generate unique VM name
+          VM_NAME="test-runner-$(date +%s)"
+          
+          # Determine resource group and VNet based on environment
+          if [ "${{ github.event.inputs.ENVIRONMENT }}" == "prod" ]; then
+            RG="niaid-bpimb-apim-dev-rg"
+            VNET_RG="niaid-bpimb-apim-dev-rg"
+            VNET="prod-vnet-tbd"  # Update when prod moves to internal VNet
+            SUBNET="prod-subnet-tbd"  # Update when prod moves to internal VNet
+          else
+            RG="nih-niaid-avidpoc-dev-rg"
+            VNET_RG="nih-niaid-azurestrides-dev-rg-admin-az"
+            VNET="nih-niaid-azurestrides-dev-apim-az"
+            SUBNET="niaid-apim"
+          fi
+          
+          echo "Creating VM: $VM_NAME in $RG (VNet: $VNET in $VNET_RG)"
+          
+          # Build VNet ID for cross-resource-group reference
+          SUBSCRIPTION=$(az account show --query id -o tsv)
+          VNET_ID="/subscriptions/$SUBSCRIPTION/resourceGroups/$VNET_RG/providers/Microsoft.Network/virtualNetworks/$VNET"
+          SUBNET_ID="$VNET_ID/subnets/$SUBNET"
+          
+          # Create small Linux VM with minimal resources in the APIM VNet
+          az vm create \
+            --resource-group "$RG" \
+            --name "$VM_NAME" \
+            --image Ubuntu2204 \
+            --size Standard_B1s \
+            --admin-username azureuser \
+            --generate-ssh-keys \
+            --subnet "$SUBNET_ID" \
+            --public-ip-address "" \
+            --nsg "" \
+            --output none
+          
+          # Get private IP
+          VM_IP=$(az vm show -d --resource-group "$RG" --name "$VM_NAME" --query privateIps -o tsv)
+          
+          echo "vm-name=$VM_NAME" >> $GITHUB_OUTPUT
+          echo "vm-ip=$VM_IP" >> $GITHUB_OUTPUT
+          echo "resource-group=$RG" >> $GITHUB_OUTPUT
+          
+          echo "VM created: $VM_NAME ($VM_IP)"
+
+  # =============================================================================
+  # RUN TESTS JOB
+  # =============================================================================
+  # Executes API tests from within the ephemeral VM
+  # =============================================================================
+  run-tests:
+    needs: create-test-vm
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.ENVIRONMENT }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Run API tests from VM
+        id: run-tests
+        run: |
+          # Determine APIM gateway based on environment
+          if [ "${{ github.event.inputs.ENVIRONMENT }}" == "prod" ]; then
+            APIM_GATEWAY="niaid-bpimb-apim-dev.azure-api.net"
+          else
+            APIM_GATEWAY="apim-daids-connect.azure-api.net"
+          fi
+          
+          # Determine which APIs to test
+          if [ -z "${{ github.event.inputs.API_NAME }}" ]; then
+            APIS_TO_TEST="${{ env.ALL_APIS }}"
+          else
+            APIS_TO_TEST="${{ github.event.inputs.API_NAME }}"
+          fi
+          
+          # Create test script
+          cat > test-script.sh << 'EOF'
+          #!/bin/bash
+          set -e
+          
+          APIM_GATEWAY="$1"
+          TEST_TYPE="$2"
+          APIS="$3"
+          
+          echo "=== API Test Execution ==="
+          echo "Gateway: $APIM_GATEWAY"
+          echo "Test Type: $TEST_TYPE"
+          echo "APIs: $APIS"
+          echo ""
+          
+          # Health check
+          if [ "$TEST_TYPE" == "health-check" ] || [ "$TEST_TYPE" == "full-suite" ]; then
+            echo "Running health check..."
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$APIM_GATEWAY" || echo "000")
+            
+            if [ "$STATUS" == "404" ] || [ "$STATUS" == "401" ] || [ "$STATUS" == "403" ]; then
+              echo "[OK] Gateway health check passed (HTTP $STATUS)"
+            else
+              echo "[FAIL] Gateway health check failed (HTTP $STATUS)"
+              exit 1
+            fi
+          fi
+          
+          # Endpoint availability
+          if [ "$TEST_TYPE" == "endpoint-availability" ] || [ "$TEST_TYPE" == "full-suite" ]; then
+            echo "Running endpoint availability tests..."
+            IFS=',' read -ra API_ARRAY <<< "$APIS"
+            
+            for api in "${API_ARRAY[@]}"; do
+              echo "Testing: $api"
+              STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$APIM_GATEWAY/$api" || echo "000")
+              
+              if [ "$STATUS" == "200" ] || [ "$STATUS" == "401" ] || [ "$STATUS" == "403" ] || [ "$STATUS" == "404" ]; then
+                echo "[OK] $api is reachable (HTTP $STATUS)"
+              else
+                echo "[FAIL] $api test failed (HTTP $STATUS)"
+                exit 1
+              fi
+            done
+          fi
+          
+          echo ""
+          echo "=== All tests passed ==="
+          EOF
+          
+          chmod +x test-script.sh
+          
+          # Execute test script on VM using Azure Run Command
+          az vm run-command invoke \
+            --resource-group "${{ needs.create-test-vm.outputs.resource-group }}" \
+            --name "${{ needs.create-test-vm.outputs.vm-name }}" \
+            --command-id RunShellScript \
+            --scripts @test-script.sh \
+            --parameters "$APIM_GATEWAY" "${{ github.event.inputs.TEST_TYPE }}" "$APIS_TO_TEST"
+
+  # =============================================================================
+  # CLEANUP JOB
+  # =============================================================================
+  # Destroys the ephemeral VM regardless of test outcome
+  # =============================================================================
+  cleanup:
+    needs: [create-test-vm, run-tests]
+    runs-on: ubuntu-latest
+    if: always()
+    environment: ${{ github.event.inputs.ENVIRONMENT }}
+    steps:
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Delete test VM
+        run: |
+          echo "Deleting VM: ${{ needs.create-test-vm.outputs.vm-name }}"
+          
+          az vm delete \
+            --resource-group "${{ needs.create-test-vm.outputs.resource-group }}" \
+            --name "${{ needs.create-test-vm.outputs.vm-name }}" \
+            --yes \
+            --no-wait
+          
+          echo "VM deletion initiated"
