@@ -45,7 +45,7 @@ jobs:
         with:
           tokenPrefix: "{#"
           tokenSuffix: "#}"
-          files: ['**/${{ inputs.CONFIGURATION_YAML_PATH }}']
+          files: "**/${{ inputs.CONFIGURATION_YAML_PATH }}"
         # specify environment specific secrets to be replaced. For example the QA environment could have a different set sercrets to
         # replace within the configuration.[environment].yaml file
         env:
