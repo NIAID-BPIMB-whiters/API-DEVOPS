@@ -1,6 +1,7 @@
 {
   "properties": {
     "scope": "/subscriptions/18fc6b8b-44fa-47d7-ae51-36766ac67165/resourceGroups/nih-niaid-avidpoc-dev-rg/providers/Microsoft.ApiManagement/service/apim-daids-connect/products/starter",
+    "ownerId": "/subscriptions/18fc6b8b-44fa-47d7-ae51-36766ac67165/resourceGroups/niaid-bpimb-apim-dev-rg/providers/Microsoft.ApiManagement/service/niaid-bpimb-apim-dev/users/04e45bf9-e8fe-4a88-a08b-3a40b21d50fc",
     "allowTracing": false,
     "state": "active"
   }

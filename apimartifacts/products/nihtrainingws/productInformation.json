@@ -1,9 +1,0 @@
-{
-  "properties": {
-    "displayName": "NIHTrainingWS",
-    "description": "This Webservice will return the NIH Training information for the users",
-    "approvalRequired": false,
-    "state": "published",
-    "subscriptionRequired": true
-  }
-}

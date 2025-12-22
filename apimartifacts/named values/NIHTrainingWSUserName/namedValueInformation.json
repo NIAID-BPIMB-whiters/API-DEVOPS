@@ -1,8 +1,0 @@
-{
-  "properties": {
-    "displayName": "NIHTrainingWSUserName",
-    "secret": false,
-    "tags": [],
-    "value": "eRAAPCITDEV"
-  }
-}
