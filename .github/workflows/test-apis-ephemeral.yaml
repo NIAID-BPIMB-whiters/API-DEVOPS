@@ -134,7 +134,9 @@ jobs:
           if [ "${{ github.event.inputs.ENVIRONMENT }}" == "prod" ]; then
             APIM_GATEWAY="niaid-bpimb-apim-dev.azure-api.net"
           else
-            APIM_GATEWAY="apim-daids-connect.azure-api.net"
+            # Use private IP for dev (internal VNet - DNS not configured)
+            APIM_GATEWAY="10.178.57.52"
+            APIM_HOST="apim-daids-connect.azure-api.net"
           fi
           
           # Determine which APIs to test
@@ -152,17 +154,21 @@ jobs:
           APIM_GATEWAY="$1"
           TEST_TYPE="$2"
           APIS="$3"
+          APIM_HOST="${4:-$APIM_GATEWAY}"
           
           echo "=== API Test Execution ==="
           echo "Gateway: $APIM_GATEWAY"
+          echo "Host Header: $APIM_HOST"
           echo "Test Type: $TEST_TYPE"
           echo "APIs: $APIS"
           echo ""
           
           # Network diagnostics
           echo "=== Network Diagnostics ==="
-          echo "DNS resolution:"
-          nslookup "$APIM_GATEWAY" || echo "DNS lookup failed"
+          echo "DNS resolution (if hostname provided):"
+          if [ "$APIM_HOST" != "$APIM_GATEWAY" ]; then
+            nslookup "$APIM_HOST" || echo "DNS lookup failed (using IP instead)"
+          fi
           echo ""
           echo "Network connectivity (ping):"
           ping -c 2 "$APIM_GATEWAY" || echo "Ping failed (may be blocked by firewall)"
@@ -171,7 +177,7 @@ jobs:
           # Health check
           if [ "$TEST_TYPE" == "health-check" ] || [ "$TEST_TYPE" == "full-suite" ]; then
             echo "Running health check..."
-            STATUS=$(curl -v -s -o /dev/null -w "%{http_code}" "https://$APIM_GATEWAY" 2>&1 | tee /tmp/curl-debug.log | tail -1)
+            STATUS=$(curl -v -s -o /dev/null -w "%{http_code}" -H "Host: $APIM_HOST" "https://$APIM_GATEWAY" --insecure 2>&1 | tee /tmp/curl-debug.log | grep -o '[0-9]\{3\}$' | tail -1)
             
             echo "Curl debug output:"
             cat /tmp/curl-debug.log
@@ -192,7 +198,7 @@ jobs:
             
             for api in "${API_ARRAY[@]}"; do
               echo "Testing: $api"
-              STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$APIM_GATEWAY/$api" || echo "000")
+              STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $APIM_HOST" "https://$APIM_GATEWAY/$api" --insecure || echo "000")
               
               if [ "$STATUS" == "200" ] || [ "$STATUS" == "401" ] || [ "$STATUS" == "403" ] || [ "$STATUS" == "404" ]; then
                 echo "[OK] $api is reachable (HTTP $STATUS)"
@@ -215,7 +221,7 @@ jobs:
             --name "${{ needs.create-test-vm.outputs.vm-name }}" \
             --command-id RunShellScript \
             --scripts @test-script.sh \
-            --parameters "$APIM_GATEWAY" "${{ github.event.inputs.TEST_TYPE }}" "$APIS_TO_TEST"
+            --parameters "$APIM_GATEWAY" "${{ github.event.inputs.TEST_TYPE }}" "$APIS_TO_TEST" "${APIM_HOST:-$APIM_GATEWAY}"
 
   # =============================================================================
   # CLEANUP JOB
