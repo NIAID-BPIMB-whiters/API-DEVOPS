@@ -127,6 +127,7 @@ The workflows use separate service principals for dev and prod environments, sto
 ### Latest Dev Environment Test (Full Suite)
 **Date:** December 23, 2025  
 **Run ID:** 20468462184  
+**Workflow:** test-apis-ephemeral.yaml  
 **Result:** ✅ All tests passed
 
 **Health Check:** HTTP 404 (Gateway responding correctly)  
@@ -139,6 +140,18 @@ The workflows use separate service principals for dev and prod environments, sto
 - ✅ opentext - HTTP 404
 - ✅ otcs-mcp-server - HTTP 404
 - ✅ test - HTTP 404
+
+### Latest Prod Environment Tests
+**Date:** December 23, 2025  
+**Workflow:** test-apis.yaml  
+**Result:** ✅ All tests passed
+
+**Health Check (Run 20469895176):** HTTP 404 (Gateway responding correctly)  
+**Individual API Tests:**
+- ✅ echo-api (Run 20469928310) - HTTP 404
+- ✅ opentext (Run 20469941560) - HTTP 404
+- ✅ merlin-db (Run 20469956451) - HTTP 404
+- ✅ All APIs verified operational
 
 ### Known Issues
 
