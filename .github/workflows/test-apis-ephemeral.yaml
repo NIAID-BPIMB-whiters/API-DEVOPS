@@ -159,10 +159,23 @@ jobs:
           echo "APIs: $APIS"
           echo ""
           
+          # Network diagnostics
+          echo "=== Network Diagnostics ==="
+          echo "DNS resolution:"
+          nslookup "$APIM_GATEWAY" || echo "DNS lookup failed"
+          echo ""
+          echo "Network connectivity (ping):"
+          ping -c 2 "$APIM_GATEWAY" || echo "Ping failed (may be blocked by firewall)"
+          echo ""
+          
           # Health check
           if [ "$TEST_TYPE" == "health-check" ] || [ "$TEST_TYPE" == "full-suite" ]; then
             echo "Running health check..."
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$APIM_GATEWAY" || echo "000")
+            STATUS=$(curl -v -s -o /dev/null -w "%{http_code}" "https://$APIM_GATEWAY" 2>&1 | tee /tmp/curl-debug.log | tail -1)
+            
+            echo "Curl debug output:"
+            cat /tmp/curl-debug.log
+            echo ""
             
             if [ "$STATUS" == "404" ] || [ "$STATUS" == "401" ] || [ "$STATUS" == "403" ]; then
               echo "[OK] Gateway health check passed (HTTP $STATUS)"
