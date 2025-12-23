@@ -52,3 +52,18 @@ jobs:
       CONFIGURATION_YAML_PATH: configuration.production.yaml # Production deployment configuration
       API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts # All artifacts extracted from DEV environment
     secrets: inherit
+
+  # Run full test suite on PRODUCTION after successful deployment
+  Test-PROD-After-Deploy:
+    needs: [Deploy-To-PROD-With-Commit-ID, Deploy-To-PROD-Without-Commit-ID]
+    if: always() && (needs.Deploy-To-PROD-With-Commit-ID.result == 'success' || needs.Deploy-To-PROD-Without-Commit-ID.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger API tests in production
+        run: |
+          gh workflow run test-apis.yaml \
+            -f ENVIRONMENT=prod \
+            -f TEST_TYPE=full-suite \
+            --repo ${{ github.repository }}
+        env:
+          GH_TOKEN: ${{ github.token }}
