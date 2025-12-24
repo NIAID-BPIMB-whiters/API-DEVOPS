@@ -626,7 +626,7 @@ az apim update \
 | Phase 5: Permissions | 2025-12-24 | 2025-12-24 | ✅ Complete | Granted prod service principal Contributor on network RG |
 | Phase 6: Workflow Updates | 2025-12-24 | 2025-12-24 | ✅ Complete | test-apis-ephemeral.yaml configured for prod (commit bce8bbd) |
 | Phase 7: Testing | 2025-12-24 | 2025-12-24 | ✅ Complete | Health check & full suite passed (runs 20488747399, 20488810937) |
-| Phase 8: Documentation | | | ⏳ In Progress | |
+| Phase 8: Documentation | 2025-12-24 | 2025-12-24 | ✅ Complete | TESTING.md and migration plan updated (commit 0aa6402) |
 
 ---
 
