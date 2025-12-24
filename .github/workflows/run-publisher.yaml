@@ -1,5 +1,9 @@
 ﻿name: Run - Publisher
 
+permissions:
+  actions: write
+  contents: read
+
 on:
   # Triggers the workflow on push events but only for the main branch
   push:
