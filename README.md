@@ -582,15 +582,26 @@ Configure in **Settings → Secrets and variables → Actions → Environments**
 | `AZURE_RESOURCE_GROUP_NAME` | PROD Resource Group (`niaid-bpimb-apim-dev-rg`) |
 | `API_MANAGEMENT_SERVICE_NAME` | PROD APIM Name (`niaid-bpimb-apim-dev`) |
 
-### Service Principal Permissions
+### Service Principal Configuration
 
-Required Azure RBAC roles:
-- **API Management Service Contributor** (on APIM instances)
-- **Virtual Machine Contributor** (for ephemeral test VMs)
-- **Network Contributor** (for VNet access)
-- **Reader** (on subscription or resource group for Azure Advisor compliance monitoring)
+**PROD Environment** (`sp-niaid-apim-prod`):
+- **App ID**: `db9f206a-1f88-4ba7-b702-c3230bfd1e14`
+- **Roles**:
+  - `API Management Service Contributor` on `niaid-bpimb-apim-dev` APIM service
+  - `Reader` on `niaid-bpimb-apim-dev-rg` resource group (for Azure Advisor)
+  - `Contributor` on `nih-niaid-azurestrides-dev-rg-admin-az` (for test VMs)
 
-**Note**: The Reader role is required for the Azure Advisor workflow to query recommendations. Grant this role at the subscription level or on specific resource groups.
+**DEV Environment** (`niaid-bpimb-apim-old-dev`):
+- **App ID**: `78b11607-408e-4027-9b34-d59bf14cae12`
+- **Roles**:
+  - `API Management Service Reader Role` on `apim-daids-connect` APIM service
+
+### Required RBAC Roles
+
+For service principals used in GitHub Actions workflows:
+- **API Management Service Contributor** - Deploy and manage APIM artifacts
+- **Reader** - Query Azure Advisor recommendations for compliance monitoring
+- **Contributor** - Create ephemeral test VMs and manage network resources (optional, based on testing strategy)
 
 ---
 
