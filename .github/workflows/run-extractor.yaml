@@ -25,6 +25,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      - name: Clean artifacts folder
+        run: |
+          if [ -d "apimartifacts" ]; then
+            echo "Removing existing apimartifacts folder to ensure clean extraction..."
+            rm -rf apimartifacts
+          fi
+        shell: bash
+      
       - name: Debug - Show extraction target
         run: |
           RG="${{ secrets.AZURE_RESOURCE_GROUP_NAME }}"
