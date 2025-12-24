@@ -19,7 +19,7 @@ on:
 env:
   apiops_release_version: v6.0.2
   #By default, this will be Information but if you want something different you will need to add a variable in the Settings -> Environment -> Environment variables section
-  Logging__LogLevel__Default: ${{ vars.LOG_LEVEL }}
+  Logging__LogLevel__Default: ${{ vars.LOG_LEVEL || 'Information' }}
 
 jobs:
   build:

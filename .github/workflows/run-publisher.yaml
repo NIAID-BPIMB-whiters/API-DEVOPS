@@ -71,3 +71,19 @@ jobs:
             --repo ${{ github.repository }}
         env:
           GH_TOKEN: ${{ github.token }}
+
+  # Optional: Check Azure Advisor compliance after deployment
+  # Uncomment to enable post-deployment compliance checks
+  # Check-Advisor-Compliance:
+  #   needs: Test-PROD-After-Deploy
+  #   if: needs.Test-PROD-After-Deploy.result == 'success'
+  #   runs-on: ubuntu-latest
+  #   environment: prod
+  #   steps:
+  #     - name: Trigger Advisor compliance check
+  #       run: |
+  #         gh workflow run check-advisor.yaml \
+  #           -f ENVIRONMENT=prod \
+  #           --repo ${{ github.repository }}
+  #       env:
+  #         GH_TOKEN: ${{ github.token }}

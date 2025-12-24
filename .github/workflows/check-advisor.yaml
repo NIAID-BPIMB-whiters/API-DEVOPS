@@ -1,0 +1,224 @@
+name: Azure Advisor Compliance Check
+
+# =============================================================================
+# AZURE ADVISOR MONITORING WORKFLOW
+# =============================================================================
+# This workflow monitors Azure Advisor recommendations for compliance tracking
+# Runs weekly and can be triggered manually for on-demand compliance checks
+# =============================================================================
+
+on:
+  # Run weekly on Mondays at 9 AM UTC
+  schedule:
+    - cron: '0 9 * * 1'
+  
+  # Allow manual execution
+  workflow_dispatch:
+    inputs:
+      ENVIRONMENT:
+        description: 'Environment to check (prod or dev)'
+        required: true
+        type: choice
+        default: 'prod'
+        options:
+          - prod
+          - dev
+
+jobs:
+  check-advisor-recommendations:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.ENVIRONMENT || 'prod' }}
+    
+    steps:
+      - name: Azure Login
+        run: |
+          az login --service-principal \
+            --username ${{ secrets.AZURE_CLIENT_ID }} \
+            --password ${{ secrets.AZURE_CLIENT_SECRET }} \
+            --tenant ${{ secrets.AZURE_TENANT_ID }}
+          az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      
+      - name: Get Azure Advisor Recommendations
+        id: advisor
+        run: |
+          # Get all recommendations for the resource group
+          RECOMMENDATIONS=$(az advisor recommendation list \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP_NAME }} \
+            --query "[].{Category:category, Impact:impact, Problem:shortDescription.problem, Resource:impactedValue}" \
+            --output json)
+          
+          # Count by impact level
+          HIGH_COUNT=$(echo "$RECOMMENDATIONS" | jq '[.[] | select(.Impact=="High")] | length')
+          MEDIUM_COUNT=$(echo "$RECOMMENDATIONS" | jq '[.[] | select(.Impact=="Medium")] | length')
+          LOW_COUNT=$(echo "$RECOMMENDATIONS" | jq '[.[] | select(.Impact=="Low")] | length')
+          TOTAL_COUNT=$((HIGH_COUNT + MEDIUM_COUNT + LOW_COUNT))
+          
+          # Count by category
+          SECURITY_COUNT=$(echo "$RECOMMENDATIONS" | jq '[.[] | select(.Category=="Security")] | length')
+          COST_COUNT=$(echo "$RECOMMENDATIONS" | jq '[.[] | select(.Category=="Cost")] | length')
+          PERFORMANCE_COUNT=$(echo "$RECOMMENDATIONS" | jq '[.[] | select(.Category=="Performance")] | length')
+          RELIABILITY_COUNT=$(echo "$RECOMMENDATIONS" | jq '[.[] | select(.Category=="HighAvailability")] | length')
+          
+          # Set outputs
+          echo "high_count=$HIGH_COUNT" >> $GITHUB_OUTPUT
+          echo "medium_count=$MEDIUM_COUNT" >> $GITHUB_OUTPUT
+          echo "low_count=$LOW_COUNT" >> $GITHUB_OUTPUT
+          echo "total_count=$TOTAL_COUNT" >> $GITHUB_OUTPUT
+          echo "security_count=$SECURITY_COUNT" >> $GITHUB_OUTPUT
+          echo "cost_count=$COST_COUNT" >> $GITHUB_OUTPUT
+          echo "performance_count=$PERFORMANCE_COUNT" >> $GITHUB_OUTPUT
+          echo "reliability_count=$RELIABILITY_COUNT" >> $GITHUB_OUTPUT
+          
+          # Save recommendations to file
+          echo "$RECOMMENDATIONS" > advisor-recommendations.json
+          
+          # Create human-readable report
+          echo "# Azure Advisor Compliance Report" > advisor-report.md
+          echo "" >> advisor-report.md
+          echo "**Environment**: ${{ github.event.inputs.ENVIRONMENT || 'prod' }}" >> advisor-report.md
+          echo "**Resource Group**: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}" >> advisor-report.md
+          echo "**Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> advisor-report.md
+          echo "" >> advisor-report.md
+          echo "## Summary" >> advisor-report.md
+          echo "" >> advisor-report.md
+          echo "| Category | Count |" >> advisor-report.md
+          echo "|----------|-------|" >> advisor-report.md
+          echo "| 🔴 High Priority | $HIGH_COUNT |" >> advisor-report.md
+          echo "| 🟡 Medium Priority | $MEDIUM_COUNT |" >> advisor-report.md
+          echo "| 🟢 Low Priority | $LOW_COUNT |" >> advisor-report.md
+          echo "| **Total** | **$TOTAL_COUNT** |" >> advisor-report.md
+          echo "" >> advisor-report.md
+          echo "## By Category" >> advisor-report.md
+          echo "" >> advisor-report.md
+          echo "| Category | Count |" >> advisor-report.md
+          echo "|----------|-------|" >> advisor-report.md
+          echo "| 🔒 Security | $SECURITY_COUNT |" >> advisor-report.md
+          echo "| 💰 Cost | $COST_COUNT |" >> advisor-report.md
+          echo "| ⚡ Performance | $PERFORMANCE_COUNT |" >> advisor-report.md
+          echo "| 🛡️ Reliability | $RELIABILITY_COUNT |" >> advisor-report.md
+          echo "" >> advisor-report.md
+          
+          # List all recommendations
+          if [ "$TOTAL_COUNT" -gt 0 ]; then
+            echo "## Recommendations" >> advisor-report.md
+            echo "" >> advisor-report.md
+            
+            # High priority first
+            if [ "$HIGH_COUNT" -gt 0 ]; then
+              echo "### 🔴 High Priority" >> advisor-report.md
+              echo "" >> advisor-report.md
+              echo "$RECOMMENDATIONS" | jq -r '.[] | select(.Impact=="High") | "- **[\(.Category)]** \(.Problem) (`\(.Resource)`)"' >> advisor-report.md
+              echo "" >> advisor-report.md
+            fi
+            
+            # Medium priority
+            if [ "$MEDIUM_COUNT" -gt 0 ]; then
+              echo "### 🟡 Medium Priority" >> advisor-report.md
+              echo "" >> advisor-report.md
+              echo "$RECOMMENDATIONS" | jq -r '.[] | select(.Impact=="Medium") | "- **[\(.Category)]** \(.Problem) (`\(.Resource)`)"' >> advisor-report.md
+              echo "" >> advisor-report.md
+            fi
+            
+            # Low priority
+            if [ "$LOW_COUNT" -gt 0 ]; then
+              echo "### 🟢 Low Priority" >> advisor-report.md
+              echo "" >> advisor-report.md
+              echo "$RECOMMENDATIONS" | jq -r '.[] | select(.Impact=="Low") | "- **[\(.Category)]** \(.Problem) (`\(.Resource)`)"' >> advisor-report.md
+              echo "" >> advisor-report.md
+            fi
+          else
+            echo "✅ **No recommendations found - environment is fully compliant!**" >> advisor-report.md
+          fi
+          
+          cat advisor-report.md
+      
+      - name: Upload Advisor Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: advisor-report-${{ github.event.inputs.ENVIRONMENT || 'prod' }}-${{ github.run_number }}
+          path: |
+            advisor-report.md
+            advisor-recommendations.json
+          retention-days: 90
+      
+      - name: Compliance Status Summary
+        run: |
+          echo "::notice::Azure Advisor Compliance Check Complete"
+          echo "::notice::Total Recommendations: ${{ steps.advisor.outputs.total_count }}"
+          echo "::notice::High: ${{ steps.advisor.outputs.high_count }} | Medium: ${{ steps.advisor.outputs.medium_count }} | Low: ${{ steps.advisor.outputs.low_count }}"
+          
+          if [ "${{ steps.advisor.outputs.high_count }}" -gt "0" ]; then
+            echo "::warning::${{ steps.advisor.outputs.high_count }} High priority recommendations require immediate attention"
+          fi
+          
+          if [ "${{ steps.advisor.outputs.security_count }}" -gt "0" ]; then
+            echo "::warning::${{ steps.advisor.outputs.security_count }} Security recommendations found"
+          fi
+      
+      - name: Check for High Priority Issues (Optional - Informational Only)
+        if: steps.advisor.outputs.high_count > 0
+        run: |
+          echo "::warning::High priority Azure Advisor recommendations detected"
+          echo "This is informational only - workflow will not fail"
+          echo "Review the uploaded artifact for details"
+          # Note: We don't fail the workflow, just warn
+          # Uncomment the next line if you want to fail on High priority findings:
+          # exit 1
+      
+      # =============================================================================
+      # EMAIL NOTIFICATION (OPTIONAL)
+      # =============================================================================
+      # Send email report with Azure Advisor findings
+      # Requires GitHub secrets configuration (see README)
+      # =============================================================================
+      - name: Send Email Report
+        if: always()  # Send email regardless of findings
+        uses: dawidd6/action-send-mail@v3
+        with:
+          # SMTP server configuration
+          server_address: ${{ secrets.SMTP_SERVER }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          
+          # Authentication
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          
+          # Email details
+          subject: "[Azure Advisor] Compliance Report - ${{ github.event.inputs.ENVIRONMENT || 'prod' }} - ${{ steps.advisor.outputs.total_count }} recommendations"
+          to: ${{ secrets.ADVISOR_EMAIL_RECIPIENTS }}
+          from: ${{ secrets.SMTP_FROM_EMAIL }}
+          
+          # Email content
+          body: |
+            Azure Advisor Compliance Report
+            
+            Environment: ${{ github.event.inputs.ENVIRONMENT || 'prod' }}
+            Resource Group: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}
+            Date: ${{ github.event.repository.updated_at }}
+            Workflow Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            
+            SUMMARY:
+            --------
+            Total Recommendations: ${{ steps.advisor.outputs.total_count }}
+            
+            By Priority:
+            - High Priority: ${{ steps.advisor.outputs.high_count }}
+            - Medium Priority: ${{ steps.advisor.outputs.medium_count }}
+            - Low Priority: ${{ steps.advisor.outputs.low_count }}
+            
+            By Category:
+            - Security: ${{ steps.advisor.outputs.security_count }}
+            - Cost: ${{ steps.advisor.outputs.cost_count }}
+            - Performance: ${{ steps.advisor.outputs.performance_count }}
+            - Reliability: ${{ steps.advisor.outputs.reliability_count }}
+            
+            Please review the attached detailed report for complete findings.
+            
+            ---
+            This is an automated message from GitHub Actions
+          
+          # Attach the detailed markdown report
+          attachments: advisor-report.md
+          
+          # Email priority
+          priority: ${{ steps.advisor.outputs.high_count > 0 && 'high' || 'normal' }}

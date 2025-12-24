@@ -1,1 +1,1095 @@
-new
+# NIAID Azure API Management DevOps Repository
+
+## Overview
+
+This repository implements **GitOps for Azure API Management (APIM)** using Microsoft's [Azure APIops Toolkit](https://github.com/Azure/apiops). It automates the extraction, version control, and deployment of API Management artifacts across development and production environments.
+
+### Key Features
+
+- ✅ **Automated API Extraction** from development APIM to Git
+- ✅ **Automated Deployment** to production APIM via pull request merges
+- ✅ **Version Control** for all APIM artifacts (APIs, policies, backends, products, etc.)
+- ✅ **Environment-Specific Configuration** with templating support
+- ✅ **Automated API Testing** using ephemeral Azure VMs for internal VNet testing
+- ✅ **API Linting** with Spectral for OpenAPI specification quality
+- ✅ **Internal VNet Support** for secure, private APIM instances
+
+---
+
+## Repository Structure
+
+```
+API-DEVOPS/
+├── .github/
+│   └── workflows/                           # GitHub Actions workflows
+│       ├── run-extractor.yaml              # Extract artifacts from DEV APIM
+│       ├── run-publisher.yaml              # Deploy artifacts to PROD APIM
+│       ├── run-publisher-with-env.yaml     # Reusable deployment workflow
+│       ├── test-apis.yaml                  # API testing (standard)
+│       └── test-apis-ephemeral.yaml        # API testing (ephemeral VM approach)
+│
+├── apimartifacts/                          # Source of truth for APIM configuration
+│   ├── policy.xml                          # Global APIM policies (CORS, etc.)
+│   ├── apis/                               # API definitions
+│   │   ├── crms-api-qa/
+│   │   ├── demo-conference-api/
+│   │   ├── echo-api/
+│   │   ├── itpms-chat-api/
+│   │   ├── merlin-db/
+│   │   ├── opentext/
+│   │   ├── otcs-mcp-server/
+│   │   └── test/
+│   │       ├── apiInformation.json         # API metadata (path, protocols, etc.)
+│   │       ├── specification.yaml          # OpenAPI specification
+│   │       ├── policy.xml                  # API-level policies (optional)
+│   │       └── operations/                 # Operation-level policies (optional)
+│   ├── backends/                           # Backend service definitions
+│   │   ├── niaid-azure-oaipoc-api-fa/
+│   │   ├── opentext-mcp-sop-policies-backend-*/
+│   │   └── WebApp_nih-niaid-bpimb-mcp-opentext-wa/
+│   ├── diagnostics/                        # Logging and monitoring config
+│   │   ├── applicationinsights/
+│   │   └── azuremonitor/
+│   ├── gateways/                           # Self-hosted gateway configs
+│   │   ├── NIAID_CRMS_Test/
+│   │   └── test-echo/
+│   ├── groups/                             # User groups
+│   ├── loggers/                            # Logger configurations
+│   ├── named values/                       # Configuration values and secrets
+│   ├── products/                           # API product bundles
+│   │   ├── merlinws/
+│   │   ├── starter/
+│   │   └── unlimited/
+│   ├── subscriptions/                      # API subscription keys
+│   └── tags/                               # Organizational tags
+│
+├── dev-extracted/                          # Historical extractions (reference only)
+│   └── artifacts-from-portal/
+│
+├── configuration.extractor.yaml            # Extraction configuration
+├── configuration.production.yaml           # Production deployment configuration
+└── README.md                               # This file
+```
+
+### Artifact Structure Details
+
+Each API in `apimartifacts/apis/` contains:
+
+- **`apiInformation.json`**: Core API metadata
+  - Display name, path, protocols
+  - Service URL (backend)
+  - Subscription settings
+  - Authentication configuration
+
+- **`specification.yaml`**: OpenAPI 3.0 specification
+  - Endpoints, parameters, schemas
+  - Request/response definitions
+  - Validated by Spectral linting
+
+- **`policy.xml`**: API-level policies (optional)
+  - Authentication, rate limiting
+  - Request/response transformation
+  - Custom business logic
+
+- **`operations/`**: Operation-specific policies (optional)
+  - Individual endpoint overrides
+  - Per-operation transformation
+
+---
+
+## Infrastructure Components
+
+### Azure Resources
+
+#### Development Environment
+- **APIM Service**: `apim-daids-connect`
+  - Resource Group: `nih-niaid-avidpoc-dev-rg`
+  - Region: `eastus`
+  - SKU: `Developer`
+  - Network: Internal VNet (`nih-niaid-azurestrides-dev-apim-az`)
+  - Gateway: `apim-daids-connect.azure-api.net` (Private IP: `10.178.57.52`)
+  - Purpose: Source for artifact extraction
+
+#### Production Environment
+- **APIM Service**: `niaid-bpimb-apim-dev`
+  - Resource Group: `niaid-bpimb-apim-dev-rg`
+  - Region: `eastus2`
+  - SKU: `Developer`
+  - Network: Internal VNet (`nih-niaid-azurestrides-bpimb-dev-apim-az`)
+  - Gateway: `niaid-bpimb-apim-dev.azure-api.net` (Private IP: `10.179.0.4`)
+  - Purpose: Target for automated deployments
+
+#### Network Configuration
+
+**Development VNet** (`nih-niaid-azurestrides-dev-apim-az`):
+- Address Space: `10.178.57.0/24`
+- APIM Subnet: `niaid-apim` (`10.178.57.48/28`)
+- Test VM Subnet: `niaid-commonservices-test` (`10.178.57.64/27`)
+
+**Production VNet** (`nih-niaid-azurestrides-bpimb-dev-apim-az`):
+- Address Space: `10.179.0.0/24`
+- APIM Subnet: `dev-apim-subnet` (`10.179.0.0/28`)
+- Test VM Subnet: `dev-commonservices` (`10.179.0.32/27`)
+
+### API Inventory
+
+Currently managing **8 APIs**:
+
+| API Name | Purpose | Path |
+|----------|---------|------|
+| `crms-api-qa` | Clinical Research Management System (QA) | `/crms-api-qa` |
+| `demo-conference-api` | Demo API for conference showcase | `/conference` |
+| `echo-api` | Testing/debugging echo service | `/echo` |
+| `itpms-chat-api` | IT Project Management chat integration | `/itpms-chat` |
+| `merlin-db` | Merlin database API | `/merlin-db` |
+| `opentext` | OpenText document management | `/opentext` |
+| `otcs-mcp-server` | OpenText Content Server MCP | `/otcs-mcp` |
+| `test` | General testing API | `/test` |
+
+---
+
+## GitHub Actions Workflows
+
+### 1. Extract Artifacts (`run-extractor.yaml`)
+
+**Purpose**: Extract APIM artifacts from DEV environment to Git repository
+
+**Trigger**: Manual workflow dispatch
+
+**Pipeline Flow**:
+```
+DEV APIM → Extractor Tool → apimartifacts/ folder → Git commit
+```
+
+**Configuration Options**:
+- **Extract All APIs**: Extracts all artifacts from DEV APIM
+- **Use configuration.extractor.yaml**: Selectively extract specific APIs/artifacts
+
+**Environment Variables**:
+- Uses `dev` environment secrets
+- `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`
+- `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP_NAME`
+- `API_MANAGEMENT_SERVICE_NAME`
+
+**Tool Version**: Azure APIops `v6.0.2`
+
+**Usage**:
+```bash
+# Extract all APIs
+gh workflow run run-extractor.yaml -f CONFIGURATION_YAML_PATH="Extract All APIs"
+
+# Extract specific APIs defined in configuration
+gh workflow run run-extractor.yaml -f CONFIGURATION_YAML_PATH="configuration.extractor.yaml"
+```
+
+---
+
+### 2. Publish to Production (`run-publisher.yaml`)
+
+**Purpose**: Deploy artifacts from repository to PRODUCTION APIM
+
+**Trigger**: 
+- Push to `main` branch (automatic)
+- Manual workflow dispatch
+
+**Pipeline Flow**:
+```
+Git Repository (apimartifacts/) → Publisher Tool → PROD APIM → Automated Tests
+```
+
+**Deployment Modes**:
+
+1. **Incremental Deployment** (default on push to main):
+   - Only deploys changed artifacts from last commit
+   - Uses Git commit ID to identify changes
+   - Faster, lower risk
+
+2. **Full Deployment** (manual option):
+   - Redeploys all artifacts in repository
+   - Used for disaster recovery or after build failures
+   - Select "publish-all-artifacts-in-repo" option
+
+**Features**:
+- ✅ **API Specification Linting**: Validates OpenAPI specs with Spectral
+- ✅ **Secret Substitution**: Replaces tokens in configuration files
+- ✅ **Post-Deployment Testing**: Triggers full API test suite on PROD
+- ✅ **Logging**: Configurable log levels (Information, Debug, etc.)
+
+**Usage**:
+```bash
+# Automatic on push to main (incremental)
+git push origin main
+
+# Manual full redeployment
+gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in-repo"
+
+# Manual incremental deployment
+gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-artifacts-in-last-commit"
+```
+
+---
+
+### 3. Reusable Publisher (`run-publisher-with-env.yaml`)
+
+**Purpose**: Reusable workflow for environment-specific deployments
+
+**Called By**: `run-publisher.yaml`
+
+**Inputs**:
+- `API_MANAGEMENT_ENVIRONMENT`: Target environment (dev/prod)
+- `CONFIGURATION_YAML_PATH`: Configuration file path
+- `COMMIT_ID`: Git commit for incremental deployment (optional)
+- `API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH`: Artifacts folder
+
+**Steps**:
+1. Checkout repository
+2. Run Spectral linting on OpenAPI specs
+3. Perform secret substitution in configuration files
+4. Download Azure APIops publisher tool
+5. Execute publisher with appropriate parameters
+
+---
+
+### 4. API Testing (`test-apis.yaml`)
+
+**Purpose**: Standard API testing workflow
+
+**Trigger**: Manual workflow dispatch
+
+**Runner Types**:
+- **Production**: GitHub-hosted runners (`ubuntu-latest`)
+- **Development**: Self-hosted runners (internal network access)
+
+**Test Types**:
+
+1. **Health Check**: 
+   - Validates APIM gateway responds
+   - Accepts HTTP 404, 401, 403 as healthy
+
+2. **Endpoint Availability**:
+   - Tests all API endpoints
+   - Accepts HTTP 200, 401, 403, 404
+
+3. **Full Suite**:
+   - Runs all test types
+
+**Usage**:
+```bash
+# Test prod environment health
+gh workflow run test-apis.yaml -f ENVIRONMENT=prod -f TEST_TYPE=health-check
+
+# Test specific API
+gh workflow run test-apis.yaml -f ENVIRONMENT=prod -f API_NAME=echo-api -f TEST_TYPE=endpoint-availability
+
+# Run full test suite
+gh workflow run test-apis.yaml -f ENVIRONMENT=prod -f TEST_TYPE=full-suite
+```
+
+---
+
+### 5. Ephemeral VM Testing (`test-apis-ephemeral.yaml`)
+
+**Purpose**: Test internal APIM instances using temporary Azure VMs
+
+**Why Needed**: 
+- APIM instances are in internal VNets (not publicly accessible)
+- No persistent self-hosted runners required
+- Tests from within Azure network boundary
+
+**How It Works**:
+
+```
+1. CREATE → Provision Ubuntu VM in APIM VNet (Standard_B1s)
+2. TEST   → Run tests via az vm run-command with private IP
+3. CLEANUP → Delete VM automatically (success or failure)
+```
+
+**Features**:
+- ✅ No persistent infrastructure costs
+- ✅ Automatic cleanup (even on failure)
+- ✅ Network diagnostics included
+- ✅ Tests using private IPs within VNet
+
+**Workflow Steps**:
+
+1. **Create Test VM**:
+   - VM Name: `test-runner-<timestamp>`
+   - Image: Ubuntu2204
+   - Size: Standard_B1s (minimal cost)
+   - Network: Same VNet as APIM, no public IP
+   - Location: Same subnet as commonservices
+
+2. **Run Tests**:
+   - Detect APIM private IP using `az vm run-command`
+   - Execute PowerShell test scripts on VM
+   - Test gateway health or API endpoints
+
+3. **Cleanup**:
+   - Always runs (`if: always()`)
+   - Deletes VM and all associated resources
+   - Total VM lifetime: ~5-10 minutes
+
+**Usage**:
+```bash
+# Test dev environment
+gh workflow run test-apis-ephemeral.yaml -f ENVIRONMENT=dev -f TEST_TYPE=health-check
+
+# Test specific API in prod
+gh workflow run test-apis-ephemeral.yaml -f ENVIRONMENT=prod -f API_NAME=opentext -f TEST_TYPE=endpoint-availability
+
+# Full suite on prod
+gh workflow run test-apis-ephemeral.yaml -f ENVIRONMENT=prod -f TEST_TYPE=full-suite
+```
+
+**Cost**: ~$0.01-0.02 per test run (5-10 minutes of B1s VM time)
+
+---
+
+### 6. Azure Advisor Compliance Check (`check-advisor.yaml`)
+
+**Purpose**: Monitor Azure Advisor recommendations for continuous compliance tracking
+
+**Trigger**: 
+- Weekly schedule (Mondays at 9 AM UTC)
+- Manual workflow dispatch
+
+**Features**:
+- ✅ Tracks security, cost, performance, and reliability recommendations
+- ✅ Counts recommendations by priority (High/Medium/Low)
+- ✅ Generates markdown compliance report
+- ✅ Saves recommendations as downloadable artifacts
+- ✅ Provides GitHub Actions annotations for high priority findings
+- ✅ Does not fail workflow (informational only)
+
+**Usage**:
+```bash
+# Run compliance check for prod environment
+gh workflow run check-advisor.yaml -f ENVIRONMENT=prod
+
+# Run for dev environment
+gh workflow run check-advisor.yaml -f ENVIRONMENT=dev
+
+# View latest report
+gh run list --workflow=check-advisor.yaml --limit 1
+gh run view <run-id>
+gh run download <run-id>  # Download the compliance report
+```
+
+**Report Contents**:
+- Summary by priority level (High/Medium/Low)
+- Summary by category (Security/Cost/Performance/Reliability)
+- Detailed list of all recommendations grouped by priority
+- Resource names affected by each recommendation
+
+**Integration with Publisher**:
+- Optional post-deployment compliance check (currently commented out)
+- Uncomment in `run-publisher.yaml` to enable automatic checks after deployments
+
+**Email Notifications**:
+The workflow includes email reporting capability. To enable email notifications, configure the following GitHub secrets:
+
+**Required Email Secrets** (Settings → Secrets → Actions):
+| Secret Name | Description | Example |
+|-------------|-------------|---------|
+| `SMTP_SERVER` | SMTP server address | `smtp.office365.com` or `smtp.gmail.com` |
+| `SMTP_PORT` | SMTP port | `587` (TLS) or `465` (SSL) |
+| `SMTP_USERNAME` | SMTP authentication username | `notifications@nih.gov` |
+| `SMTP_PASSWORD` | SMTP authentication password | Your email password or app password |
+| `SMTP_FROM_EMAIL` | From email address | `azure-advisor@nih.gov` |
+| `ADVISOR_EMAIL_RECIPIENTS` | Comma-separated email recipients | `admin@nih.gov,team@nih.gov` |
+
+**SMTP Configuration Examples**:
+
+*Microsoft 365 / Outlook:*
+- Server: `smtp.office365.com`
+- Port: `587`
+- TLS: Yes
+- Authentication: Required
+
+*Gmail (requires App Password):*
+- Server: `smtp.gmail.com`
+- Port: `587`
+- TLS: Yes
+- Note: Must use [App Password](https://support.google.com/accounts/answer/185833), not regular password
+
+**Email Report Features**:
+- 📧 Sent weekly on schedule or after manual runs
+- 📊 Summary statistics in email body
+- 📎 Detailed markdown report attached
+- ⚠️ High priority email if critical findings detected
+- 🔗 Direct link to workflow run for full details
+
+**To Enable Email**:
+1. Configure the secrets above in GitHub
+2. Email will be sent automatically on next workflow run
+3. To disable email, remove the "Send Email Report" step from the workflow
+
+---
+
+## Configuration Files
+
+### `configuration.extractor.yaml`
+
+Controls what gets extracted from DEV APIM.
+
+```yaml
+apimServiceName: apim-daids-connect  # DEV APIM instance
+
+apis:
+  - name: crms-api-qa
+  - name: demo-conference-api
+  - name: echo-api
+  # ... additional APIs
+
+# Optional sections (commented out by default):
+# namedValues:
+# products:
+# backends:
+```
+
+**Usage**:
+- Extract only specific APIs (reduces extraction time)
+- Version control which artifacts are managed
+- Exclude legacy or manually-managed resources
+
+---
+
+### `configuration.production.yaml`
+
+Controls deployment to PRODUCTION APIM.
+
+```yaml
+apimServiceName: niaid-bpimb-apim-dev  # PROD APIM instance
+
+# API-specific configuration overrides
+apis:
+  # Example:
+  # - name: demo-conference-api
+  #   diagnostics:
+  #     - name: applicationinsights
+  #       properties:
+  #         verbosity: Error
+```
+
+**Features**:
+- Environment-specific overrides
+- Diagnostic configuration
+- Secret token replacement using `{#TOKEN_NAME#}` syntax
+
+**Important Notes**:
+- ⚠️ **SOAP/WSDL APIs NOT SUPPORTED** by Azure APIops v6.0.2
+- SOAP APIs must be managed manually via Azure Portal
+- APIops will ignore manually-deployed SOAP APIs
+
+---
+
+## Development Workflow
+
+### Standard GitOps Pipeline
+
+```mermaid
+graph LR
+    A[Dev APIM] -->|Extract| B[Git Repo]
+    B -->|PR Review| C[Main Branch]
+    C -->|Auto Deploy| D[Prod APIM]
+    D -->|Test| E[Validation]
+```
+
+### Step-by-Step Process
+
+#### 1. Make Changes in DEV APIM
+- Use Azure Portal to develop/test APIs in DEV environment
+- Configure policies, backends, products, etc.
+
+#### 2. Extract Artifacts
+```bash
+# Extract changes from DEV to Git
+gh workflow run run-extractor.yaml -f CONFIGURATION_YAML_PATH="configuration.extractor.yaml"
+
+# Wait for workflow to complete
+gh run watch
+
+# Pull extracted changes
+git pull origin main
+```
+
+#### 3. Create Feature Branch
+```bash
+# Create feature branch
+git checkout -b feature/add-new-api
+
+# Review extracted changes
+git status
+git diff
+
+# Commit to feature branch
+git add .
+git commit -m "Add new API from DEV environment"
+git push origin feature/add-new-api
+```
+
+#### 4. Create Pull Request
+```bash
+# Create PR
+gh pr create --title "Add new API" --body "Extracted new API from DEV APIM"
+
+# Request reviews from team
+gh pr review --approve <PR_NUMBER>
+```
+
+#### 5. Merge to Main (Auto-Deploy)
+```bash
+# Merge PR
+gh pr merge <PR_NUMBER> --squash
+
+# Publisher workflow automatically triggers
+# Deploys to PROD APIM
+# Runs automated tests
+```
+
+#### 6. Verify Deployment
+```bash
+# Check publisher workflow status
+gh run list --workflow=run-publisher.yaml
+
+# View test results
+gh run list --workflow=test-apis-ephemeral.yaml
+```
+
+---
+
+## Secret Management
+
+### Required GitHub Secrets
+
+Configure in **Settings → Secrets and variables → Actions → Environments**
+
+#### DEV Environment Secrets
+| Secret Name | Description |
+|-------------|-------------|
+| `AZURE_CLIENT_ID` | Service Principal Application ID |
+| `AZURE_CLIENT_SECRET` | Service Principal Secret |
+| `AZURE_TENANT_ID` | Azure AD Tenant ID |
+| `AZURE_SUBSCRIPTION_ID` | Azure Subscription ID |
+| `AZURE_RESOURCE_GROUP_NAME` | DEV Resource Group (`nih-niaid-avidpoc-dev-rg`) |
+| `API_MANAGEMENT_SERVICE_NAME` | DEV APIM Name (`apim-daids-connect`) |
+
+#### PROD Environment Secrets
+| Secret Name | Description |
+|-------------|-------------|
+| `AZURE_CLIENT_ID` | Service Principal Application ID |
+| `AZURE_CLIENT_SECRET` | Service Principal Secret |
+| `AZURE_TENANT_ID` | Azure AD Tenant ID |
+| `AZURE_SUBSCRIPTION_ID` | Azure Subscription ID |
+| `AZURE_RESOURCE_GROUP_NAME` | PROD Resource Group (`niaid-bpimb-apim-dev-rg`) |
+| `API_MANAGEMENT_SERVICE_NAME` | PROD APIM Name (`niaid-bpimb-apim-dev`) |
+
+### Service Principal Permissions
+
+Required Azure RBAC roles:
+- **API Management Service Contributor** (on APIM instances)
+- **Virtual Machine Contributor** (for ephemeral test VMs)
+- **Network Contributor** (for VNet access)
+
+---
+
+## Testing Strategy
+
+### Test Environments
+
+| Environment | Network | Testing Method | Status |
+|-------------|---------|----------------|--------|
+| **Production** | Internal VNet | Ephemeral Azure VMs | ✅ Operational |
+| **Development** | Internal VNet | Ephemeral Azure VMs | ✅ Operational |
+
+### Test Execution
+
+**Automated Testing**:
+- Triggered after successful PROD deployments
+- Can be manually triggered for ad-hoc validation
+
+**Test Coverage**:
+- Gateway health checks
+- Endpoint availability
+- API response validation
+- Network connectivity diagnostics
+
+**Test Results**:
+- View in GitHub Actions workflow logs
+- Failed tests block production deployments (future enhancement)
+
+### Latest Test Results
+
+**Production Environment (Post-VNet Migration - December 24, 2025)**:
+- ✅ Health Check: HTTP 404 (Gateway responding via private IP 10.179.0.4)
+- ✅ Full Suite: All 8 APIs accessible
+- ✅ DNS Resolution: niaid-bpimb-apim-dev.azure-api.net → 10.179.0.4
+- Migration completed: December 23-24, 2025
+
+**Development Environment**:
+- ✅ All 8 APIs tested successfully using ephemeral VMs
+- ✅ Private IP testing: 10.178.57.52
+- ✅ DNS workaround: Using private IP with Host header
+
+### Service Principal Setup
+
+**Required Permissions for Ephemeral VM Testing**:
+- Contributor role on VM resource group
+- Contributor role on VNet resource group (cross-RG subnet access)
+- Service Principal: `github-apidevops-workflow` (a763a856-d2ae-43ab-b686-0cf24a5da690)
+
+---
+
+## Important Notes & Limitations
+
+### SOAP/WSDL API Management
+
+⚠️ **Azure APIops v6.0.2 does NOT support SOAP/WSDL APIs**
+
+- SOAP APIs must be deployed manually through Azure Portal
+- Do not add SOAP/WSDL specification files to this repository
+- APIops will ignore manually-deployed SOAP APIs in the portal
+
+**Historical SOAP APIs** (removed from this repo):
+- `nihtrainingws`: Deleted from DEV and cleaned up
+- `numberconversion`: Deleted from DEV and cleaned up
+
+### Network Security
+
+- Both DEV and PROD APIM instances are in **Internal VNet** mode
+- Not publicly accessible from internet
+- Testing requires access from within Azure VNet
+- Developer Portal accessible via custom domain only
+
+### Version Control Best Practices
+
+- ✅ Always extract from DEV before making repository changes
+- ✅ Use feature branches for all changes
+- ✅ Require PR reviews before merging to main
+- ✅ Test in DEV APIM before extracting
+- ❌ Never manually edit PROD APIM (use GitOps)
+- ❌ Never commit secrets or sensitive data
+
+---
+
+## Troubleshooting
+
+### Extractor Workflow Fails
+
+**Issue**: Extraction fails with authentication error
+
+**Solution**:
+```bash
+# Verify service principal credentials
+az login --service-principal \
+  --username $AZURE_CLIENT_ID \
+  --password $AZURE_CLIENT_SECRET \
+  --tenant $AZURE_TENANT_ID
+
+# Test APIM access
+az apim show --name apim-daids-connect --resource-group nih-niaid-avidpoc-dev-rg
+```
+
+### Publisher Workflow Fails
+
+**Issue**: Spectral linting fails
+
+**Solution**:
+- Review OpenAPI specification errors in workflow logs
+- Fix specification in DEV APIM
+- Re-extract and update repository
+
+**Issue**: Deployment fails with conflict error
+
+**Solution**:
+```bash
+# Use full redeployment option
+gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in-repo"
+```
+
+### Test Workflow Fails
+
+**Issue**: Cannot reach APIM gateway from ephemeral VM
+
+**Solution**:
+- Verify VNet configuration matches APIM network
+- Check subnet configuration in workflow
+- Review NSG rules on APIM subnet
+- Verify APIM private IP in workflow configuration
+
+### Common Errors
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| "API not found" | API deleted from APIM but still in repo | Remove from Git manually |
+| "Invalid OpenAPI spec" | Specification format issues | Validate with Spectral locally |
+| "Network timeout" | VNet/subnet misconfiguration | Verify network settings |
+| "Insufficient permissions" | Service principal lacks RBAC | Grant required roles |
+
+---
+
+## Production VNet Migration History
+
+**Migration Completed**: December 23-24, 2025
+
+**Objective**: Migrated production APIM instance (`niaid-bpimb-apim-dev`) from External/Public mode to Internal VNet mode for enhanced security.
+
+**Results**:
+- ✅ Virtual Network Type: Changed from External to Internal
+- ✅ Private IP Assigned: 10.179.0.4
+- ✅ VNet: nih-niaid-azurestrides-bpimb-dev-apim-az (10.179.0.0/24)
+- ✅ APIM Subnet: dev-apim-subnet (10.179.0.0/28)
+- ✅ Test VM Subnet: dev-commonservices (10.179.0.32/27)
+- ✅ Private DNS Zone: azure-api.net configured
+- ✅ NSG Rules: APIM management (3443), HTTPS (443), Load Balancer configured
+- ✅ All 8 APIs tested and operational post-migration
+- ✅ Downtime: ~3 minutes (faster than expected 30-45 min)
+
+**Network Security Groups**:
+- NSG: `dev-apim-nsg`
+- AllowAPIMManagement: Port 3443 (Priority 100)
+- AllowHTTPS: Port 443 (Priority 110)
+- AllowAzureLoadBalancer: All ports (Priority 120)
+
+**Testing Configuration**:
+- Updated ephemeral VM workflow for prod environment
+- Tests now run from within VNet using private IP
+- Automated testing verified post-migration
+
+---
+
+## TODO / Roadmap
+
+### 1. Azure Advisor Optimization
+**Priority**: Medium  
+**Status**: 🔄 In Progress  
+**Last Reviewed**: December 24, 2025
+
+**Summary**: 13 security recommendations identified. Safe to implement: 8 items. Requires planning: 5 items.
+
+**🎯 OPPORTUNITY**: `niaid-bpimb-apim-dev` has no active consumers - ideal time to implement security hardening before go-live!
+
+#### ✅ Safe to Implement (No Functionality Impact)
+
+**Key Vault Security (Priority: High)**
+
+- [x] **Enable Key Vault Deletion Protection** ✅ **COMPLETED** - December 24, 2025
+  - Impact: Medium, Resource: `kv-niaid-bpimb-apim-dev`
+  - Status: `enablePurgeProtection: true`
+  - Impact: Prevents accidental permanent deletion of Key Vault. Safe to enable.
+
+- [x] **Enable Key Vault Diagnostic Logs** ✅ **COMPLETED** - December 24, 2025
+  - Impact: Low, Resource: `kv-niaid-bpimb-apim-dev`
+  - Log Analytics Workspace: `law-niaid-bpimb-apim-dev`
+  - Logging: AuditEvent + AllMetrics
+  - Impact: Enables audit logging and metrics. No functional impact, improves security monitoring.
+
+**APIM Named Values Security (Priority: Medium)**
+
+- [ ] **Move Secret Named Values to Key Vault** (3 secrets)
+  - `niaid-azure-oaipoc-api-fa-key`
+  - `6671ebaafb42680790aa5617`
+  - `OTCSTICKET`
+  
+  **Decision**: Implement in DEV environment (`apim-daids-connect`) first, then deploy to PROD via GitOps pipeline.
+  
+  **Process for DEV**:
+  1. Create Key Vault in DEV environment (if not exists)
+  2. Store secrets in DEV Key Vault: `az keyvault secret set --vault-name <dev-kv-name> --name <secret-name> --value <secret-value>`
+  3. Update APIM named values in DEV to reference Key Vault
+  4. Test all APIs in DEV environment
+  5. Extract artifacts using `run-extractor.yaml`
+  6. Deploy to PROD via normal GitOps pipeline
+  7. Test all APIs in PROD environment
+  
+  **Impact**: Improves secret management security. Maintains consistency across environments.
+
+#### ⚠️ Requires Evaluation (Potential Functionality Impact)
+
+**⚠️ NOTE**: Since `niaid-bpimb-apim-dev` has no active consumers, these can be implemented NOW with minimal risk. This is the ideal time for security hardening before production use.
+
+**Key Vault Network Security (Priority: Medium → HIGH)**
+
+- [x] **Configure Key Vault Private Link** ✅ **COMPLETED** - December 24, 2025
+  - Resource: `kv-niaid-bpimb-apim-dev`
+  - Private Endpoint: `pe-kv-niaid-bpimb-apim-dev` (IP: 10.179.0.42)
+  - Private DNS Zone: `privatelink.vaultcore.azure.net`
+  - VNet Link: Connected to `nih-niaid-azurestrides-bpimb-dev-apim-az`
+  - DNS A Record: `kv-niaid-bpimb-apim-dev` → `10.179.0.42`
+  - Benefits: Traffic now stays within Azure backbone, no public internet exposure
+
+- [x] **Enable Key Vault Firewall** ✅ **COMPLETED** - December 24, 2025
+  - Resource: `kv-niaid-bpimb-apim-dev`
+  - Configuration: Public network access **DISABLED**
+  - All traffic now flows through private endpoint
+  - APIM access via internal VNet only (10.179.0.0/28)
+  - Benefits: Maximum security posture, no public internet exposure
+
+**APIM Backend Authentication (Priority: Medium)**
+
+- [ ] **Add Authentication to Backends**
+  - `webapp_nih-niaid-bpimb-mcp-opentext-wa`
+  - `niaid-azure-oaipoc-api-fa`
+  - `opentext-mcp-sop-policies-backend-d9b07a2f-8947-ecf4-f7c5-c85ad690a9ca`
+  
+  **RISK WITH NO CONSUMERS**: 🟡 **MEDIUM** - Still requires backend owner coordination
+  
+  **Consideration**: 
+  - Backend services may not support authentication yet
+  - Requires coordination with backend owners
+  - Can test without affecting users
+  
+  **Recommended**: 🔄 **Coordinate with backend owners** - Can implement freely but needs their buy-in
+
+**Key Vault Secret Expiration (Priority: High)**
+
+- [ ] **Set Expiration Dates on Key Vault Secrets** (Resource: `kv-niaid-bpimb-apim-dev`)
+  
+  **RISK WITH NO CONSUMERS**: 🟡 **MEDIUM** - Still requires rotation automation
+  
+  **Consideration**: 
+  - Even without users, expired secrets will break the environment
+  - Need rotation automation BEFORE setting expiration
+  - Good opportunity to test rotation process
+  
+  **Recommended**: ⏸️ **DEFER** - Set up rotation automation first, then implement
+
+#### ✅ Already Implemented
+
+- [x] **APIM Virtual Network Integration** - Completed December 23-24, 2025
+  - APIM now in Internal VNet mode
+  - VNet: `nih-niaid-azurestrides-bpimb-dev-apim-az`
+  - Private IP: `10.179.0.4`
+
+#### Implementation Order (Recommended)
+
+1. **Phase 1 - No Impact (Week 1)** ✅ COMPLETED
+   - Enable Key Vault deletion protection
+   - Enable Key Vault diagnostic logs
+   - Configure Key Vault private link
+   - Enable Key Vault firewall
+   
+2. **Phase 2 - Low Impact (Week 2)**
+   - Move named values to Key Vault (test thoroughly)
+   - Update repository artifacts
+   
+3. **Phase 3 - Medium Impact (Week 3-4)**
+   - Coordinate backend authentication with service owners
+   
+4. **Phase 4 - Requires Coordination (Future)**
+   - Establish secret rotation process
+   - Set expiration dates on secrets
+
+#### Continuous Monitoring (Recommended)
+
+**Azure Advisor Integration in Workflows**:
+
+Add Azure Advisor checks to your CI/CD pipeline for continuous compliance monitoring:
+
+1. **Create Dedicated Advisor Workflow** (`check-advisor.yaml`):
+   - Run on schedule (weekly)
+   - Run manually on-demand
+   - Report High/Medium impact findings
+   - Track compliance trends over time
+
+2. **Integrate with Deployment Workflow**:
+   - Add post-deployment Advisor check in `run-publisher.yaml`
+   - Warn on new recommendations (don't fail build)
+   - Create GitHub issue for High impact findings
+
+3. **Recommended Implementation**:
+   ```yaml
+   # .github/workflows/check-advisor.yaml
+   name: Azure Advisor Compliance Check
+   
+   on:
+     schedule:
+       - cron: '0 9 * * 1'  # Weekly on Mondays at 9 AM
+     workflow_dispatch:
+   
+   jobs:
+     check-advisor:
+       runs-on: ubuntu-latest
+       environment: prod
+       steps:
+         - name: Azure Login
+           run: |
+             az login --service-principal \
+               --username ${{ secrets.AZURE_CLIENT_ID }} \
+               --password ${{ secrets.AZURE_CLIENT_SECRET }} \
+               --tenant ${{ secrets.AZURE_TENANT_ID }}
+             az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+         
+         - name: Get Advisor Recommendations
+           id: advisor
+           run: |
+             # Get recommendations
+             RECOMMENDATIONS=$(az advisor recommendation list \
+               --resource-group niaid-bpimb-apim-dev-rg \
+               --query "[].{Category:category, Impact:impact, Problem:shortDescription.problem, Resource:impactedValue}" \
+               --output json)
+             
+             # Count by impact
+             HIGH_COUNT=$(echo $RECOMMENDATIONS | jq '[.[] | select(.Impact=="High")] | length')
+             MEDIUM_COUNT=$(echo $RECOMMENDATIONS | jq '[.[] | select(.Impact=="Medium")] | length')
+             LOW_COUNT=$(echo $RECOMMENDATIONS | jq '[.[] | select(.Impact=="Low")] | length')
+             
+             echo "high_count=$HIGH_COUNT" >> $GITHUB_OUTPUT
+             echo "medium_count=$MEDIUM_COUNT" >> $GITHUB_OUTPUT
+             echo "low_count=$LOW_COUNT" >> $GITHUB_OUTPUT
+             
+             # Save full report
+             echo "$RECOMMENDATIONS" | jq -r '.[] | "- [\(.Impact)] \(.Problem) (\(.Resource))"' > advisor-report.txt
+             cat advisor-report.txt
+         
+         - name: Comment on findings
+           run: |
+             echo "::notice::Azure Advisor found ${{ steps.advisor.outputs.high_count }} High, ${{ steps.advisor.outputs.medium_count }} Medium, ${{ steps.advisor.outputs.low_count }} Low priority recommendations"
+             
+             if [ "${{ steps.advisor.outputs.high_count }}" -gt "0" ]; then
+               echo "::warning::High priority security recommendations require attention"
+             fi
+   ```
+
+4. **Add to Publisher Workflow** (optional):
+   ```yaml
+   # In run-publisher.yaml, after Test-PROD-After-Deploy job:
+   Check-Advisor-Post-Deploy:
+     needs: Test-PROD-After-Deploy
+     runs-on: ubuntu-latest
+     environment: prod
+     steps:
+       - name: Check for new Advisor recommendations
+         run: |
+           # Check if deployment introduced new recommendations
+           # (implementation similar to above)
+   ```
+
+**Benefits**:
+- ✅ Continuous compliance monitoring
+- ✅ Early detection of configuration drift
+- ✅ Automated tracking of remediation progress
+- ✅ Prevents new security issues from being deployed
+
+**Recommended Approach**:
+- Start with standalone weekly workflow
+- Monitor for false positives
+- After 2-3 weeks, integrate into deployment pipeline if stable
+
+**Azure Portal**: Navigate to [Azure Advisor](https://portal.azure.com/#view/Microsoft_Azure_Expert/AdvisorMenuBlade/~/overview) → Filter by Resource Group → niaid-bpimb-apim-dev-rg
+
+---
+
+### 2. Configure QA Environment
+**Priority**: High  
+**Status**: ⏳ Pending
+
+**Existing Resources**:
+- Resource Group: `niaid-bpimb-apim-qa-rg`
+- APIM Instance: `niaid-bpimb-apim-qa`
+
+**Configuration Tasks**:
+- [ ] Verify/identify network resource group for QA environment
+- [ ] Create or configure VNet for QA APIM (Internal VNet mode)
+  - VNet naming convention: `nih-niaid-azurestrides-bpimb-qa-apim-az`
+  - Address space (suggested): `10.180.0.0/24`
+  - APIM subnet: `/28` (16 IPs)
+  - Test VM subnet: `/27` (32 IPs)
+- [ ] Configure NSG rules (matching prod configuration)
+- [ ] Configure Private DNS Zone
+- [ ] Migrate QA APIM to Internal VNet mode (if currently External)
+- [ ] Create GitHub environment secrets for QA
+  - `AZURE_CLIENT_ID`
+  - `AZURE_CLIENT_SECRET`
+  - `AZURE_TENANT_ID`
+  - `AZURE_SUBSCRIPTION_ID`
+  - `AZURE_RESOURCE_GROUP_NAME`
+  - `API_MANAGEMENT_SERVICE_NAME`
+- [ ] Grant service principal permissions on QA resources
+
+**Reference**: Follow same process as Production VNet Migration (completed December 23-24, 2025)
+
+---
+
+### 3. Update Deployment Pipeline (DEV → PROD → QA)
+**Priority**: High  
+**Status**: ⏳ Pending
+
+**Current Pipeline**:
+```
+DEV (apim-daids-connect) → Repository → PROD (niaid-bpimb-apim-dev)
+```
+
+**Target Pipeline**:
+```
+DEV (apim-daids-connect) → Repository → PROD (niaid-bpimb-apim-dev) → QA (niaid-bpimb-apim-qa)
+```
+
+**Implementation Tasks**:
+
+- [ ] **Create QA Configuration File**
+  - Create `configuration.qa.yaml` (similar to `configuration.production.yaml`)
+  - Configure QA-specific settings
+
+- [ ] **Update `run-publisher.yaml` Workflow**
+  - Add QA deployment job after PROD deployment succeeds
+  - Configure environment-specific deployment to QA
+  - Add sequential dependency: DEV → Repo → PROD → QA
+
+- [ ] **Add QA Testing Integration**
+  - Update `test-apis-ephemeral.yaml` for QA environment
+  - Configure QA VNet/subnet details for ephemeral VM testing
+  - Add post-deployment testing for QA
+
+- [ ] **Workflow Sequence**
+  ```yaml
+  1. Extract from DEV
+  2. Deploy to PROD
+  3. Test PROD (automated)
+  4. If PROD tests pass → Deploy to QA
+  5. Test QA (automated)
+  6. Report results
+  ```
+
+- [ ] **Update Documentation**
+  - Update README with QA environment details
+  - Document QA testing procedures
+  - Update workflow diagrams
+
+**Benefits**:
+- ✅ Production validation before QA deployment
+- ✅ Automated testing at each stage
+- ✅ Complete environment promotion path
+- ✅ Reduced risk of QA environment issues
+
+---
+
+## Additional Documentation
+
+- **[Azure APIops Documentation](https://github.com/Azure/apiops)**: Official toolkit documentation
+- **[Azure APIM Documentation](https://learn.microsoft.com/en-us/azure/api-management/)**: Microsoft APIM docs
+- **[APIM VNet Configuration](https://learn.microsoft.com/en-us/azure/api-management/api-management-using-with-vnet)**: Azure VNet integration guide
+- **[Internal VNet Mode](https://learn.microsoft.com/en-us/azure/api-management/api-management-using-with-internal-vnet)**: Internal VNet documentation
+
+---
+
+## Maintenance & Support
+
+### Repository Owner
+- **Organization**: NIH/NIAID/BPIMB
+- **Contact**: NIAID OCICB BPIMB Admins <NIAIDOCICBBPIMBAdmins@mail.nih.gov>
+
+### Azure Resources
+- **Subscription**: NIH.NIAID.AzureSTRIDES_Dev
+- **Support**: Azure Support Portal
+
+### Update Schedule
+- **Azure APIops**: Check for updates quarterly
+- **Workflows**: Review and update as needed
+- **OpenAPI Specs**: Continuous validation via Spectral
+
+---
+
+## License
+
+This repository is for internal NIH/NIAID use only. All rights reserved.
