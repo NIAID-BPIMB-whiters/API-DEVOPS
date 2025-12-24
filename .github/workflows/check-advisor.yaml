@@ -129,10 +129,14 @@ jobs:
           
           cat advisor-report.md
       
+      - name: Generate Timestamp
+        id: timestamp
+        run: echo "datetime=$(date -u '+%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+      
       - name: Upload Advisor Report
         uses: actions/upload-artifact@v4
         with:
-          name: advisor-report-dev-${{ github.run_number }}
+          name: advisor-report-dev-${{ steps.timestamp.outputs.datetime }}
           path: |
             advisor-report.md
             advisor-recommendations.json
@@ -274,10 +278,14 @@ jobs:
           
           cat advisor-report.md
       
+      - name: Generate Timestamp
+        id: timestamp
+        run: echo "datetime=$(date -u '+%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+      
       - name: Upload Advisor Report
         uses: actions/upload-artifact@v4
         with:
-          name: advisor-report-prod-${{ github.run_number }}
+          name: advisor-report-prod-${{ steps.timestamp.outputs.datetime }}
           path: |
             advisor-report.md
             advisor-recommendations.json
