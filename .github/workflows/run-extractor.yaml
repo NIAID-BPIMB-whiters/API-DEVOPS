@@ -24,6 +24,14 @@ jobs:
     environment: dev # change this to match the dev environment created in settings 
     steps:
       - uses: actions/checkout@v4
+      
+      - name: Debug - Show extraction target
+        run: |
+          echo "Extracting from:"
+          echo "  Resource Group: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}"
+          echo "  APIM Service: ${{ secrets.API_MANAGEMENT_SERVICE_NAME }}"
+          echo "  Subscription: ${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+        shell: bash
           
       - name: Run extractor without Config Yaml
         if: ${{ github.event.inputs.CONFIGURATION_YAML_PATH == 'Extract All APIs' }}
