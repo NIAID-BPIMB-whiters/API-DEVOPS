@@ -27,10 +27,15 @@ jobs:
       
       - name: Debug - Show extraction target
         run: |
+          RG="${{ secrets.AZURE_RESOURCE_GROUP_NAME }}"
+          APIM="${{ secrets.API_MANAGEMENT_SERVICE_NAME }}"
+          SUB="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
           echo "Extracting from:"
-          echo "  Resource Group: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}"
-          echo "  APIM Service: ${{ secrets.API_MANAGEMENT_SERVICE_NAME }}"
-          echo "  Subscription: ${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          echo "  Resource Group length: ${#RG}"
+          echo "  APIM Service length: ${#APIM}"
+          echo "  Subscription length: ${#SUB}"
+          echo "  Resource Group ends with: ${RG: -7}"
+          echo "  APIM Service ends with: ${APIM: -7}"
         shell: bash
           
       - name: Run extractor without Config Yaml
