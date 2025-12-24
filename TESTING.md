@@ -63,10 +63,13 @@ gh workflow run test-apis-ephemeral.yaml -f ENVIRONMENT=dev -f TEST_TYPE=endpoin
 ## Environments
 
 ### Production Environment
-- **APIM Gateway**: `niaid-bpimb-apim-dev.azure-api.net`
-- **Network Type**: External (currently public)
-- **Testing Method**: GitHub-hosted runners
+- **APIM Gateway**: `niaid-bpimb-apim-dev.azure-api.net` (private IP: `10.179.0.4`)
+- **Network Type**: Internal VNet
+- **VNet**: `nih-niaid-azurestrides-bpimb-dev-apim-az`
+- **Subnet**: `dev-apim-subnet` (APIM), `dev-commonservices` (test VMs)
+- **Testing Method**: Ephemeral Azure VMs with private IP
 - **Status**: ✅ Fully operational
+- **Migration Date**: December 23-24, 2025
 
 ### Development Environment
 - **APIM Gateway**: `apim-daids-connect.azure-api.net` (private IP: `10.178.57.52`)
@@ -141,7 +144,26 @@ The workflows use separate service principals for dev and prod environments, sto
 - ✅ otcs-mcp-server - HTTP 404
 - ✅ test - HTTP 404
 
-### Latest Prod Environment Tests
+### Latest Prod Environment Tests (Post-VNet Migration)
+**Date:** December 24, 2025  
+**Workflow:** test-apis-ephemeral.yaml  
+**Result:** ✅ All tests passed
+
+**Health Check (Run 20488747399):** HTTP 404 (Gateway responding correctly via private IP 10.179.0.4)  
+**Full Suite (Run 20488810937):**
+- ✅ DNS Resolution: niaid-bpimb-apim-dev.azure-api.net → 10.179.0.4
+- ✅ crms-api-qa - HTTP 404
+- ✅ demo-conference-api - HTTP 404
+- ✅ echo-api - HTTP 404
+- ✅ itpms-chat-api - HTTP 404
+- ✅ merlin-db - HTTP 404
+- ✅ opentext - HTTP 404
+- ✅ otcs-mcp-server - HTTP 404
+- ✅ test - HTTP 404
+
+**Note:** Production APIM migrated to Internal VNet mode on December 23-24, 2025. All tests now use ephemeral VMs within the VNet (10.179.0.0/24).
+
+### Previous Prod Environment Tests (Pre-Migration)
 **Date:** December 23, 2025  
 **Workflow:** test-apis.yaml  
 **Result:** ✅ All tests passed
@@ -152,6 +174,8 @@ The workflows use separate service principals for dev and prod environments, sto
 - ✅ opentext (Run 20469941560) - HTTP 404
 - ✅ merlin-db (Run 20469956451) - HTTP 404
 - ✅ All APIs verified operational
+
+**Note:** These tests were performed when production was in External/Public mode.
 
 ### Known Issues
 

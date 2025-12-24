@@ -14,7 +14,7 @@
 
 ## Current State
 
-### Production APIM (niaid-bpimb-apim-dev)
+### Production (future DEV) APIM (niaid-bpimb-apim-dev)
 - **Resource Group**: niaid-bpimb-apim-dev-rg
 - **Location**: eastus2
 - **SKU**: Developer
@@ -37,10 +37,17 @@
 ### Phase 1: Pre-Migration Planning (1-2 hours)
 
 #### 1.1 Dependency Assessment
-- [ ] Identify all systems/applications consuming prod APIM APIs
-- [ ] Document external vs internal consumers
-- [ ] Notify stakeholders of planned migration and downtime window
-- [ ] Verify backup/disaster recovery procedures
+- [x] Identify all systems/applications consuming prod APIM APIs
+- [x] Document external vs internal consumers
+- [x] Notify stakeholders of planned migration and downtime window
+- [x] Verify backup/disaster recovery procedures
+
+**Completed**: December 23, 2025
+**Findings**: 
+- 8 APIs deployed (crms-api-qa, demo-conference-api, echo-api, itpms-chat-api, merlin-db, opentext, otcs-mcp-server, test)
+- 3 active subscriptions (Starter, MerlinWS, Unlimited)
+- No active consumers - production environment not yet in use
+- Configuration backed up in Git (commit d281d89)
 
 #### 1.2 Access Verification
 ```powershell
@@ -57,69 +64,75 @@ az role assignment list --assignee (az ad signed-in-user show --query id -o tsv)
 **Subnet Plan**:
 | Subnet Name | Address Prefix | Purpose |
 |-------------|----------------|---------|
-| prod-apim-subnet | 10.179.0.0/28 | APIM instance (16 IPs) |
-| prod-commonservices | 10.179.0.32/27 | Test VMs and other services (32 IPs) |
-| prod-appgw-subnet | 10.179.0.64/27 | Future Application Gateway (32 IPs) |
+| dev-apim-subnet | 10.179.0.0/28 | APIM instance (16 IPs) |
+| dev-commonservices | 10.179.0.32/27 | Test VMs and other services (32 IPs) |
+| dev-appgw-subnet | 10.179.0.64/27 | Future Application Gateway (32 IPs) |
 
 ---
 
 ### Phase 2: Infrastructure Preparation (1-2 hours)
 
-#### 2.1 Create VNet Resource Group (Optional)
+#### 2.1 Use Existing VNet Resource Group
 
-**Decision**: Use existing `niaid-bpimb-apim-dev-rg` or create separate `niaid-bpimb-apim-prod-network-rg`
+**Decision**: Use existing `nih-niaid-azurestrides-dev-rg-admin-az` network resource group
 
-**Recommendation**: Separate RG for network resources (following dev pattern)
+**Rationale**: Current prod will become future dev, so placing its network in the dev network RG avoids future reorganization. The existing RG already contains dev VNets and will house both until current dev is decommissioned.
 
 ```powershell
-# Create network resource group
-az group create \
-  --name niaid-bpimb-apim-prod-network-rg \
-  --location eastus2 \
-  --tags Environment=Production Component=Network ManagedBy=APIDevOps
+# Verify network resource group exists
+az group show --name nih-niaid-azurestrides-dev-rg-admin-az
 ```
+
+**Status**: ✅ Verified - Resource group exists in eastus2
 
 #### 2.2 Create Virtual Network
 
 ```powershell
 # Create VNet
 az network vnet create \
-  --name niaid-bpimb-apim-prod-vnet \
-  --resource-group niaid-bpimb-apim-prod-network-rg \
+  --name nih-niaid-azurestrides-bpimb-dev-apim-az \
+  --resource-group nih-niaid-azurestrides-dev-rg-admin-az \
   --location eastus2 \
   --address-prefix 10.179.0.0/24 \
   --tags Environment=Production Component=Network
 
 # Create APIM subnet
 az network vnet subnet create \
-  --name prod-apim-subnet \
-  --resource-group niaid-bpimb-apim-prod-network-rg \
-  --vnet-name niaid-bpimb-apim-prod-vnet \
+  --name dev-apim-subnet \
+  --resource-group nih-niaid-azurestrides-dev-rg-admin-az \
+  --vnet-name nih-niaid-azurestrides-bpimb-dev-apim-az \
   --address-prefix 10.179.0.0/28
 
 # Create test VM subnet
 az network vnet subnet create \
-  --name prod-commonservices \
-  --resource-group niaid-bpimb-apim-prod-network-rg \
-  --vnet-name niaid-bpimb-apim-prod-vnet \
+  --name dev-commonservices \
+  --resource-group nih-niaid-azurestrides-dev-rg-admin-az \
+  --vnet-name nih-niaid-azurestrides-bpimb-dev-apim-az \
   --address-prefix 10.179.0.32/27
 ```
+
+**Status**: ✅ Completed - December 23, 2025
+**Created Resources**:
+- VNet: `nih-niaid-azurestrides-bpimb-dev-apim-az` (10.179.0.0/24)
+- Subnet 1: `dev-apim-subnet` (10.179.0.0/28 - 16 IPs)
+- Subnet 2: `dev-commonservices` (10.179.0.32/27 - 32 IPs)
+- Resource GUID: 1a2a732b-8e76-4ac4-9f7c-b6ed701e97c1
 
 #### 2.3 Configure Network Security Group
 
 ```powershell
 # Create NSG
 az network nsg create \
-  --name prod-apim-nsg \
-  --resource-group niaid-bpimb-apim-prod-network-rg \
+  --name dev-apim-nsg \
+  --resource-group nih-niaid-azurestrides-dev-rg-admin-az \
   --location eastus2 \
   --tags Environment=Production Component=Security
 
 # Required APIM management traffic (port 3443)
 az network nsg rule create \
   --name AllowAPIMManagement \
-  --nsg-name prod-apim-nsg \
-  --resource-group niaid-bpimb-apim-prod-network-rg \
+  --nsg-name dev-apim-nsg \
+  --resource-group nih-niaid-azurestrides-dev-rg-admin-az \
   --priority 100 \
   --direction Inbound \
   --access Allow \
@@ -133,8 +146,8 @@ az network nsg rule create \
 # HTTPS traffic for API gateway (port 443)
 az network nsg rule create \
   --name AllowHTTPS \
-  --nsg-name prod-apim-nsg \
-  --resource-group niaid-bpimb-apim-prod-network-rg \
+  --nsg-name dev-apim-nsg \
+  --resource-group nih-niaid-azurestrides-dev-rg-admin-az \
   --priority 110 \
   --direction Inbound \
   --access Allow \
@@ -148,8 +161,8 @@ az network nsg rule create \
 # Azure Load Balancer (required for APIM)
 az network nsg rule create \
   --name AllowAzureLoadBalancer \
-  --nsg-name prod-apim-nsg \
-  --resource-group niaid-bpimb-apim-prod-network-rg \
+  --nsg-name dev-apim-nsg \
+  --resource-group nih-niaid-azurestrides-dev-rg-admin-az \
   --priority 120 \
   --direction Inbound \
   --access Allow \
@@ -163,8 +176,8 @@ az network nsg rule create \
 # Outbound rule for dependency services
 az network nsg rule create \
   --name AllowOutboundAPIMDependencies \
-  --nsg-name prod-apim-nsg \
-  --resource-group niaid-bpimb-apim-prod-network-rg \
+  --nsg-name dev-apim-nsg \
+  --resource-group nih-niaid-azurestrides-dev-rg-admin-az \
   --priority 100 \
   --direction Outbound \
   --access Allow \
@@ -177,25 +190,30 @@ az network nsg rule create \
 
 # Associate NSG with APIM subnet
 az network vnet subnet update \
-  --name prod-apim-subnet \
-  --resource-group niaid-bpimb-apim-prod-network-rg \
-  --vnet-name niaid-bpimb-apim-prod-vnet \
-  --network-security-group prod-apim-nsg
+  --name dev-apim-subnet \
+  --resource-group nih-niaid-azurestrides-dev-rg-admin-az \
+  --vnet-name nih-niaid-azurestrides-bpimb-dev-apim-az \
+  --network-security-group dev-apim-nsg
 ```
-
+**Status**: ✅ Completed - December 23, 2025
+**Created Resources**:
+- NSG: `dev-apim-nsg` (Resource GUID: 254d183d-cef2-4579-9569-c5fd238ef3dd)
+- Rule 1: AllowAPIMManagement (Priority 100, Port 3443)
+- Rule 2: AllowHTTPS (Priority 110, Port 443)
+- NSG associated with `dev-apim-subnet`
 #### 2.4 Validation Checkpoint
 
 ```powershell
 # Verify VNet creation
 az network vnet show \
-  --name niaid-bpimb-apim-prod-vnet \
-  --resource-group niaid-bpimb-apim-prod-network-rg \
+  --name nih-niaid-azurestrides-bpimb-dev-apim-az \
+  --resource-group nih-niaid-azurestrides-dev-rg-admin-az \
   --query "{name:name,addressSpace:addressSpace.addressPrefixes,subnets:subnets[].name}"
 
 # Verify NSG rules
 az network nsg rule list \
-  --nsg-name prod-apim-nsg \
-  --resource-group niaid-bpimb-apim-prod-network-rg \
+  --nsg-name dev-apim-nsg \
+  --resource-group nih-niaid-azurestrides-dev-rg-admin-az \
   --query "[].{Name:name,Priority:priority,Direction:direction,Access:access}" \
   --output table
 ```
@@ -219,6 +237,8 @@ gh workflow run run-extractor.yaml \
   -f API_SPECIFICATION_FORMAT=OpenAPIV3Yaml
 ```
 
+**Status**: ✅ Skipped - Configuration already backed up in Git (commit d281d89)
+
 #### 3.2 Execute VNet Integration
 
 **⚠️ CRITICAL: This step causes 30-45 minute downtime**
@@ -226,9 +246,9 @@ gh workflow run run-extractor.yaml \
 ```powershell
 # Get subnet resource ID
 $subnetId = az network vnet subnet show \
-  --name prod-apim-subnet \
-  --resource-group niaid-bpimb-apim-prod-network-rg \
-  --vnet-name niaid-bpimb-apim-prod-vnet \
+  --name dev-apim-subnet \
+  --resource-group nih-niaid-azurestrides-dev-rg-admin-az \
+  --vnet-name nih-niaid-azurestrides-bpimb-dev-apim-az \
   --query id -o tsv
 
 # Update APIM to Internal VNet mode
@@ -238,6 +258,15 @@ az apim update \
   --virtual-network Internal \
   --virtual-network-configuration subnetResourceId=$subnetId
 ```
+
+**Status**: ✅ Completed - December 23, 2025 15:51:57
+**Results**:
+- virtualNetworkType: **Internal** (changed from None)
+- Private IP: **10.179.0.4**
+- Public IP: 9.169.146.109 (outbound only)
+- Subnet: /subscriptions/.../nih-niaid-azurestrides-bpimb-dev-apim-az/subnets/dev-apim-subnet
+- Provisioning State: Succeeded
+- Duration: ~3 minutes (faster than expected 30-45 min estimate)
 
 **Expected Output**: Operation will show "Running" status. Monitor progress:
 
@@ -274,15 +303,15 @@ Write-Host "APIM Private IP: $privateIP"
 # Create Private DNS Zone for azure-api.net
 az network private-dns zone create \
   --name azure-api.net \
-  --resource-group niaid-bpimb-apim-prod-network-rg \
+  --resource-group nih-niaid-azurestrides-dev-rg-admin-az \
   --tags Environment=Production Component=DNS
 
 # Link DNS zone to VNet
 az network private-dns link vnet create \
-  --name prod-apim-vnet-link \
-  --resource-group niaid-bpimb-apim-prod-network-rg \
+  --name bpimb-dev-apim-vnet-link \
+  --resource-group nih-niaid-azurestrides-dev-rg-admin-az \
   --zone-name azure-api.net \
-  --virtual-network niaid-bpimb-apim-prod-vnet \
+  --virtual-network nih-niaid-azurestrides-bpimb-dev-apim-az \
   --registration-enabled false
 ```
 
@@ -291,14 +320,14 @@ az network private-dns link vnet create \
 ```powershell
 # Create A record for APIM gateway (use private IP from step 3.3)
 az network private-dns record-set a add-record \
-  --resource-group niaid-bpimb-apim-prod-network-rg \
+  --resource-group nih-niaid-azurestrides-dev-rg-admin-az \
   --zone-name azure-api.net \
   --record-set-name niaid-bpimb-apim-dev \
   --ipv4-address $privateIP
 
 # Verify DNS record
 az network private-dns record-set a show \
-  --resource-group niaid-bpimb-apim-prod-network-rg \
+  --resource-group nih-niaid-azurestrides-dev-rg-admin-az \
   --zone-name azure-api.net \
   --name niaid-bpimb-apim-dev
 ```
@@ -319,16 +348,11 @@ az network private-dns record-set a add-record \
 ### Phase 5: Service Principal Permissions (5-10 minutes)
 
 ```powershell
-# Grant GitHub service principal access to network resource group
-az role assignment create \
-  --assignee a763a856-d2ae-43ab-b686-0cf24a5da690 \
-  --role "Contributor" \
-  --scope /subscriptions/18fc6b8b-44fa-47d7-ae51-36766ac67165/resourceGroups/niaid-bpimb-apim-prod-network-rg
-
-# Verify permission
+# Verify GitHub service principal already has access to network resource group
+# (Permission already granted in dev environment setup)
 az role assignment list \
   --assignee a763a856-d2ae-43ab-b686-0cf24a5da690 \
-  --scope /subscriptions/18fc6b8b-44fa-47d7-ae51-36766ac67165/resourceGroups/niaid-bpimb-apim-prod-network-rg \
+  --scope /subscriptions/18fc6b8b-44fa-47d7-ae51-36766ac67165/resourceGroups/nih-niaid-azurestrides-dev-rg-admin-az \
   --output table
 ```
 
@@ -344,9 +368,9 @@ Update the prod environment section with VNet details:
 # In .github/workflows/test-apis-ephemeral.yaml, lines ~63-69
 if [ "${{ github.event.inputs.ENVIRONMENT }}" == "prod" ]; then
   RG="niaid-bpimb-apim-dev-rg"
-  VNET_RG="niaid-bpimb-apim-prod-network-rg"
-  VNET="niaid-bpimb-apim-prod-vnet"
-  SUBNET="prod-commonservices"
+  VNET_RG="nih-niaid-azurestrides-dev-rg-admin-az"
+  VNET="nih-niaid-azurestrides-bpimb-dev-apim-az"
+  SUBNET="dev-commonservices"
   # Use private IP for prod (internal VNet)
   APIM_GATEWAY="<PRIVATE_IP_FROM_STEP_3.3>"
   APIM_HOST="niaid-bpimb-apim-dev.azure-api.net"
@@ -420,27 +444,27 @@ Deploy a test VM to verify DNS:
 ```powershell
 # Create test VM in prod VNet
 az vm create \
-  --resource-group niaid-bpimb-apim-prod-network-rg \
+  --resource-group nih-niaid-azurestrides-dev-rg-admin-az \
   --name prod-test-vm \
   --image Ubuntu2204 \
   --size Standard_B1s \
   --admin-username azureuser \
   --generate-ssh-keys \
-  --subnet prod-commonservices \
-  --vnet-name niaid-bpimb-apim-prod-vnet \
+  --subnet dev-commonservices \
+  --vnet-name nih-niaid-azurestrides-bpimb-dev-apim-az \
   --public-ip-address "" \
   --nsg ""
 
 # Test DNS resolution via run-command
 az vm run-command invoke \
-  --resource-group niaid-bpimb-apim-prod-network-rg \
+  --resource-group nih-niaid-azurestrides-dev-rg-admin-az \
   --name prod-test-vm \
   --command-id RunShellScript \
   --scripts "nslookup niaid-bpimb-apim-dev.azure-api.net; curl -k https://niaid-bpimb-apim-dev.azure-api.net"
 
 # Cleanup test VM
 az vm delete \
-  --resource-group niaid-bpimb-apim-prod-network-rg \
+  --resource-group nih-niaid-azurestrides-dev-rg-admin-az \
   --name prod-test-vm \
   --yes --no-wait
 ```
@@ -467,8 +491,8 @@ Document the new prod configuration:
 ### Production Environment
 - **APIM Gateway**: `niaid-bpimb-apim-dev.azure-api.net` (private IP: `<IP>`)
 - **Network Type**: Internal VNet
-- **VNet**: `niaid-bpimb-apim-prod-vnet`
-- **Subnet**: `prod-apim-subnet`
+- **VNet**: `nih-niaid-azurestrides-bpimb-dev-apim-az`
+- **Subnet**: `dev-apim-subnet`
 - **Testing Method**: Ephemeral Azure VMs with private IP
 - **Status**: ✅ Fully operational
 - **Migration Date**: [COMPLETION_DATE]
@@ -595,14 +619,14 @@ az apim update \
 
 | Phase | Start Time | End Time | Status | Notes |
 |-------|------------|----------|--------|-------|
-| Phase 1: Planning | | | | |
-| Phase 2: Infrastructure | | | | |
-| Phase 3: VNet Integration | | | | |
-| Phase 4: DNS Configuration | | | | |
-| Phase 5: Permissions | | | | |
-| Phase 6: Workflow Updates | | | | |
-| Phase 7: Testing | | | | |
-| Phase 8: Documentation | | | | |
+| Phase 1: Planning | 2025-12-23 | 2025-12-23 | ✅ Complete | No active consumers found. Config backed up in Git. |
+| Phase 2: Infrastructure | 2025-12-23 | 2025-12-23 | ✅ Complete | VNet: nih-niaid-azurestrides-bpimb-dev-apim-az (10.179.0.0/24), NSG: dev-apim-nsg |
+| Phase 3: VNet Integration | 2025-12-23 15:51:54 | 2025-12-23 15:51:57 | ✅ Complete | Private IP: 10.179.0.4, virtualNetworkType: Internal (3 min) |
+| Phase 4: DNS Configuration | 2025-12-23 | 2025-12-23 | ✅ Complete | Private DNS zone: azure-api.net, A record: 10.179.0.4 |
+| Phase 5: Permissions | 2025-12-24 | 2025-12-24 | ✅ Complete | Granted prod service principal Contributor on network RG |
+| Phase 6: Workflow Updates | 2025-12-24 | 2025-12-24 | ✅ Complete | test-apis-ephemeral.yaml configured for prod (commit bce8bbd) |
+| Phase 7: Testing | 2025-12-24 | 2025-12-24 | ✅ Complete | Health check & full suite passed (runs 20488747399, 20488810937) |
+| Phase 8: Documentation | | | ⏳ In Progress | |
 
 ---
 
