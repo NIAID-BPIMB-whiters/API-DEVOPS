@@ -405,6 +405,23 @@ The workflow uses GitHub's built-in notification system for reporting:
 - Click "advisor-compliance-report-prod" artifact
 - Download and view the markdown report
 
+**Troubleshooting**:
+
+If the workflow returns 0 recommendations but you see recommendations in the Azure Portal:
+
+1. **Check Service Principal Permissions**: The service principal needs **Reader** role on the resource group or subscription
+   ```bash
+   # Grant Reader role to service principal
+   az role assignment create \
+     --assignee <service-principal-app-id> \
+     --role "Reader" \
+     --scope "/subscriptions/<subscription-id>/resourceGroups/niaid-bpimb-apim-dev-rg"
+   ```
+
+2. **Verify Environment Secrets**: Ensure the `prod` environment in GitHub has correct secrets configured
+
+3. **Check Azure Advisor Cache**: Recommendations may take 24-72 hours to appear after infrastructure changes
+
 ---
 
 ## Configuration Files
@@ -571,6 +588,9 @@ Required Azure RBAC roles:
 - **API Management Service Contributor** (on APIM instances)
 - **Virtual Machine Contributor** (for ephemeral test VMs)
 - **Network Contributor** (for VNet access)
+- **Reader** (on subscription or resource group for Azure Advisor compliance monitoring)
+
+**Note**: The Reader role is required for the Azure Advisor workflow to query recommendations. Grant this role at the subscription level or on specific resource groups.
 
 ---
 
