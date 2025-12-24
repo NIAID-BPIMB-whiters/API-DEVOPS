@@ -61,7 +61,7 @@ jobs:
     steps:
       - name: Trigger API tests in production
         run: |
-          gh workflow run test-apis.yaml \
+          gh workflow run test-apis-ephemeral.yaml \
             -f ENVIRONMENT=prod \
             -f TEST_TYPE=full-suite \
             --repo ${{ github.repository }}
