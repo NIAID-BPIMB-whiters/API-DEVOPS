@@ -14,15 +14,6 @@ on:
         options:
         - Extract All APIs
         - configuration.extractor.yaml
-      API_SPECIFICATION_FORMAT:
-        description: 'API Specification Format'     
-        required: true
-        type: choice
-        options:
-        - OpenAPIV3Yaml 
-        - OpenAPIV3Json
-        - OpenAPIV2Yaml
-        - OpenAPIV2Json
 
 env:
   apiops_release_version: v6.0.2
@@ -44,7 +35,7 @@ jobs:
           AZURE_RESOURCE_GROUP_NAME: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}
           API_MANAGEMENT_SERVICE_NAME: ${{ secrets.API_MANAGEMENT_SERVICE_NAME }}
           API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: ${{ GITHUB.WORKSPACE }}/apimartifacts  # change this to the artifacts folder
-          API_SPECIFICATION_FORMAT: ${{ github.event.inputs.API_SPECIFICATION_FORMAT }} 
+          API_SPECIFICATION_FORMAT: OpenAPIV3Yaml 
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = "Stop"
@@ -100,7 +91,7 @@ jobs:
           AZURE_RESOURCE_GROUP_NAME: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}
           API_MANAGEMENT_SERVICE_NAME: ${{ secrets.API_MANAGEMENT_SERVICE_NAME }}
           API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: ${{ GITHUB.WORKSPACE }}/apimartifacts  # change this to the artifacts folder
-          API_SPECIFICATION_FORMAT: ${{ github.event.inputs.API_SPECIFICATION_FORMAT }} 
+          API_SPECIFICATION_FORMAT: OpenAPIV3Yaml 
           CONFIGURATION_YAML_PATH:  ${{ GITHUB.WORKSPACE }}/${{ github.event.inputs.CONFIGURATION_YAML_PATH }}
         run: |
           Set-StrictMode -Version Latest
