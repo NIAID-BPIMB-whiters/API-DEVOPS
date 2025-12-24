@@ -385,44 +385,25 @@ gh run download <run-id>  # Download the compliance report
 - Optional post-deployment compliance check (currently commented out)
 - Uncomment in `run-publisher.yaml` to enable automatic checks after deployments
 
-**Email Notifications**:
-The workflow includes email reporting capability. To enable email notifications, configure the following GitHub secrets:
+**Notifications**:
 
-**Required Email Secrets** (Settings → Secrets → Actions):
-| Secret Name | Description | Example |
-|-------------|-------------|---------|
-| `SMTP_SERVER` | SMTP server address | `smtp.office365.com` or `smtp.gmail.com` |
-| `SMTP_PORT` | SMTP port | `587` (TLS) or `465` (SSL) |
-| `SMTP_USERNAME` | SMTP authentication username | `notifications@nih.gov` |
-| `SMTP_PASSWORD` | SMTP authentication password | Your email password or app password |
-| `SMTP_FROM_EMAIL` | From email address | `azure-advisor@nih.gov` |
-| `ADVISOR_EMAIL_RECIPIENTS` | Comma-separated email recipients | `admin@nih.gov,team@nih.gov` |
+The workflow uses GitHub's built-in notification system for reporting:
 
-**SMTP Configuration Examples**:
+- ✅ **Workflow Success/Failure**: GitHub sends email notifications based on your [notification settings](https://github.com/settings/notifications)
+- ⚠️ **High Priority Findings**: Warnings are displayed in the Actions workflow run UI
+- 📊 **Compliance Reports**: Always uploaded as downloadable artifacts with 90-day retention
+- 📈 **Summary Stats**: Displayed in workflow run output (total count, priority breakdown, categories)
 
-*Microsoft 365 / Outlook:*
-- Server: `smtp.office365.com`
-- Port: `587`
-- TLS: Yes
-- Authentication: Required
+**How to Receive Notifications**:
+1. Configure your GitHub notification preferences at Settings → Notifications
+2. Enable "Actions" notifications (email, web, or mobile)
+3. You'll receive emails automatically on workflow failures or completion
+4. Download detailed reports from workflow artifacts
 
-*Gmail (requires App Password):*
-- Server: `smtp.gmail.com`
-- Port: `587`
-- TLS: Yes
-- Note: Must use [App Password](https://support.google.com/accounts/answer/185833), not regular password
-
-**Email Report Features**:
-- 📧 Sent weekly on schedule or after manual runs
-- 📊 Summary statistics in email body
-- 📎 Detailed markdown report attached
-- ⚠️ High priority email if critical findings detected
-- 🔗 Direct link to workflow run for full details
-
-**To Enable Email**:
-1. Configure the secrets above in GitHub
-2. Email will be sent automatically on next workflow run
-3. To disable email, remove the "Send Email Report" step from the workflow
+**Viewing Reports**:
+- Navigate to Actions → Check Azure Advisor Compliance → Latest run
+- Click "advisor-compliance-report-prod" artifact
+- Download and view the markdown report
 
 ---
 
