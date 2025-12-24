@@ -42,10 +42,14 @@ jobs:
         id: advisor
         run: |
           # Get all recommendations for the resource group
+          echo "Checking resource group: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}"
+          
           RECOMMENDATIONS=$(az advisor recommendation list \
             --resource-group ${{ secrets.AZURE_RESOURCE_GROUP_NAME }} \
             --query "[].{Category:category, Impact:impact, Problem:shortDescription.problem, Resource:impactedValue}" \
             --output json)
+          
+          echo "Raw recommendations count: $(echo "$RECOMMENDATIONS" | jq 'length')"
           
           # Count by impact level
           HIGH_COUNT=$(echo "$RECOMMENDATIONS" | jq '[.[] | select(.Impact=="High")] | length')
