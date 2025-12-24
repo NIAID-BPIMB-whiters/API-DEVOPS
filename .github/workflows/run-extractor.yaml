@@ -195,6 +195,14 @@ jobs:
       issues: write
     steps:
       - uses: actions/checkout@v4
+      
+      - name: Clean artifacts folder before download
+        run: |
+          if [ -d "apimartifacts" ]; then
+            echo "Removing existing apimartifacts folder before downloading extracted artifacts..."
+            rm -rf apimartifacts
+          fi
+        shell: bash
           
       - name: Download artifacts-from-portal
         uses: actions/download-artifact@v4
