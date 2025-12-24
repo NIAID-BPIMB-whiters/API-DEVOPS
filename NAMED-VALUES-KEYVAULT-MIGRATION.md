@@ -1,8 +1,49 @@
 # Named Values to Key Vault Migration Plan
 
 **Date Created**: December 24, 2025  
-**Status**: Ready for Implementation  
+**Status**: 🔄 In Progress (Phase 1: 83% Complete)  
+**Last Updated**: December 24, 2025  
 **Environment**: DEV → PROD (via GitOps)
+
+---
+
+## Current Status
+
+### Phase 1: DEV Environment Setup - 🔄 IN PROGRESS (83% Complete)
+
+- ✅ **Step 1.1**: Retrieved secret values from source systems
+  - `niaid-azure-oaipoc-api-fa-key`: Retrieved from Function App (`nih-niaid-azure-oaipoc-rg`)
+  - `Logger-Credentials`: Retrieved from Application Insights (`nih-niaid-bpimb-sebapi-poc-dev-eastus-rg`)
+  - ~~`OTCSTICKET`~~: Deleted from DEV APIM, excluded from migration
+
+- ✅ **Step 1.2**: Created Key Vault in DEV
+  - Name: `kv-niaid-apim-dev`
+  - Resource Group: `nih-niaid-avidpoc-dev-rg`
+  - Location: `eastus`
+  - Purge Protection: Enabled
+  - Vault URI: `https://kv-niaid-apim-dev.vault.azure.net/`
+
+- ✅ **Step 1.3**: Stored secrets in Key Vault (via Azure Portal)
+  - `niaid-azure-oaipoc-api-fa-key`: Stored
+  - `Logger-Credentials`: Stored
+
+- ✅ **Step 1.4**: Enabled APIM Managed Identity
+  - APIM: `apim-daids-connect`
+  - Identity Type: System-assigned
+  - Principal ID: `94d1c4e6-c81e-46b9-aa5a-5cbe95cd568d`
+
+- ✅ **Step 1.5**: Granted Key Vault Access
+  - Role: `Key Vault Secrets User`
+  - Assignee: APIM managed identity
+  - Scope: `kv-niaid-apim-dev`
+
+- ⏸️ **Step 1.6**: Update APIM Named Values (NEXT STEP)
+  - Pending: Update named values to reference Key Vault URIs
+  - Pending: Verify Key Vault integration
+
+### Phase 2: DEV Testing - ⏳ PENDING
+
+### Phase 3: PROD Deployment - ⏳ PENDING
 
 ---
 

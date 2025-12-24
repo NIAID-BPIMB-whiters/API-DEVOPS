@@ -798,21 +798,22 @@ gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in
 
 **APIM Named Values Security (Priority: Medium)**
 
-- [ ] **Move Secret Named Values to Key Vault** (3 secrets)
-  - `niaid-azure-oaipoc-api-fa-key`
-  - `6671ebaafb42680790aa5617`
-  - `OTCSTICKET`
+- [x] **Move Secret Named Values to Key Vault** 🔄 **IN PROGRESS** - December 24, 2025
+  - `niaid-azure-oaipoc-api-fa-key` ✅
+  - `6671ebaafb42680790aa5617` (Logger-Credentials) ✅
+  - ~~`OTCSTICKET`~~ (Deleted from DEV APIM)
   
-  **Decision**: Implement in DEV environment (`apim-daids-connect`) first, then deploy to PROD via GitOps pipeline.
+  **Progress**:
+  - ✅ Phase 1.1: Retrieved secret values from source systems
+  - ✅ Phase 1.2: Created Key Vault in DEV (`kv-niaid-apim-dev`)
+  - ✅ Phase 1.3: Stored secrets in Key Vault
+  - ✅ Phase 1.4: Enabled APIM managed identity (Principal: `94d1c4e6-c81e-46b9-aa5a-5cbe95cd568d`)
+  - ✅ Phase 1.5: Granted APIM "Key Vault Secrets User" role
+  - ⏸️ Phase 1.6: Update APIM named values to reference Key Vault (PENDING)
+  - ⏸️ Phase 2: Test APIs in DEV
+  - ⏸️ Phase 3: Extract and deploy to PROD via GitOps
   
-  **Process for DEV**:
-  1. Create Key Vault in DEV environment (if not exists)
-  2. Store secrets in DEV Key Vault: `az keyvault secret set --vault-name <dev-kv-name> --name <secret-name> --value <secret-value>`
-  3. Update APIM named values in DEV to reference Key Vault
-  4. Test all APIs in DEV environment
-  5. Extract artifacts using `run-extractor.yaml`
-  6. Deploy to PROD via normal GitOps pipeline
-  7. Test all APIs in PROD environment
+  **Detailed Plan**: See [NAMED-VALUES-KEYVAULT-MIGRATION.md](NAMED-VALUES-KEYVAULT-MIGRATION.md)
   
   **Impact**: Improves secret management security. Maintains consistency across environments.
 
