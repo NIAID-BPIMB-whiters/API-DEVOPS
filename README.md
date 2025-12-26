@@ -637,9 +637,11 @@ Configure in **Settings → Secrets and variables → Actions → Environments**
   - `Contributor` on `nih-niaid-azurestrides-dev-rg-admin-az` (for test VMs)
 
 **DAIDS_DEV Environment** (`github-apidevops-workflow`):
-- **App ID**: `a763a856-d2ae-43ab-b686-0cf24a5da690`
+- **App ID**: `78b11607-408e-4027-9b34-d59bf14cae12`
+- **Principal ID**: `a763a856-d2ae-43ab-b686-0cf24a5da690`
 - **Roles**:
-  - Permissions on `nih-niaid-avidpoc-dev-rg` (DAIDS DEV APIM resource group)
+  - `Reader` on `nih-niaid-avidpoc-dev-rg` (read-only for extractor)
+  - `API Management Service Reader Role` on `apim-daids-connect` (read-only APIM artifacts)
   - `Contributor` on `nih-niaid-azurestrides-dev-rg-admin-az` (for VNet/NSG and test VMs)
 
 **QA Environment** (`github-apidevops-qa`):
