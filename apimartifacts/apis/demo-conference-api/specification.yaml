@@ -4,7 +4,7 @@ info:
   description: 'A sample API with information related to a technical conference.  The available resources  include *Speakers*, *Sessions* and *Topics*.  A single write operation is available to provide  feedback on a session.'
   version: '1.0'
 servers:
-  - url: https://gateway.apimdev.niaid.nih.gov/demo-conference-api
+  - url: https://niaid-bpimb-apim-dev.azure-api.net/demo-conference-api
 paths:
   /sessions:
     get:

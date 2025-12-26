@@ -3,7 +3,7 @@ info:
   title: test
   version: '1.0'
 servers:
-  - url: https://gateway.apimdev.niaid.nih.gov/test
+  - url: https://niaid-bpimb-apim-dev.azure-api.net/test
 paths:
   /anything/test:
     get:
