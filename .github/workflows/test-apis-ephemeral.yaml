@@ -264,14 +264,13 @@ jobs:
             echo "Found NIC: $NIC_NAME"
           fi
           
-          # Delete VM
+          # Delete VM and wait for completion
           az vm delete \
             --resource-group "$RG" \
             --name "$VM_NAME" \
-            --yes \
-            --no-wait
+            --yes
           
-          # Delete NIC if found
+          # Delete NIC after VM is fully deleted
           if [ -n "$NIC_NAME" ]; then
             echo "Deleting NIC: $NIC_NAME"
             az network nic delete \
@@ -280,4 +279,4 @@ jobs:
               --no-wait
           fi
           
-          echo "VM and NIC deletion initiated"
+          echo "VM and NIC cleanup complete"
