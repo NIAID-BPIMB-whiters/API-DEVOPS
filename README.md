@@ -110,6 +110,12 @@ Each API in `apimartifacts/apis/` contains:
   - Gateway: `apim-daids-connect.azure-api.net` (Private IP: `10.178.57.52`)
   - Purpose: Source for artifact extraction
 
+- **Application Insights**: `apim-daids-connect-ai`
+  - Resource Group: `nih-niaid-avidpoc-dev-rg`
+  - Region: `eastus`
+  - Instrumentation Key: `98066d90-6565-4993-b071-c5a453f2ce44`
+  - Purpose: APIM diagnostics and logging
+
 #### Production Environment
 - **APIM Service**: `niaid-bpimb-apim-dev`
   - Resource Group: `niaid-bpimb-apim-dev-rg`
@@ -118,6 +124,12 @@ Each API in `apimartifacts/apis/` contains:
   - Network: Internal VNet (`nih-niaid-azurestrides-bpimb-dev-apim-az`)
   - Gateway: `niaid-bpimb-apim-dev.azure-api.net` (Private IP: `10.179.0.4`)
   - Purpose: Target for automated deployments
+
+- **Application Insights**: `niaid-bpimb-apim-dev-ai`
+  - Resource Group: `niaid-bpimb-apim-dev-rg`
+  - Region: `eastus2`
+  - Instrumentation Key: `369236ca-f1b0-43f7-a58e-036094365a7c`
+  - Purpose: APIM diagnostics and logging
 
 #### Network Configuration
 
