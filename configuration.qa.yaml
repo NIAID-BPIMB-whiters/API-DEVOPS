@@ -1,13 +1,13 @@
 # =============================================================================
-# DEV DEPLOYMENT CONFIGURATION
+# QA DEPLOYMENT CONFIGURATION
 # =============================================================================
 # This configuration file is used by the publisher workflow to deploy 
-# extracted artifacts from DAIDS_DEV environment to DEV environment.
+# extracted artifacts from DEV environment to QA environment.
 #
-# Pipeline: DAIDS_DEV (apim-daids-connect) → Repository → DEV (niaid-bpimb-apim-dev)
+# Pipeline: DAIDS_DEV (apim-daids-connect) → Repository → DEV → QA
 # =============================================================================
 
-apimServiceName: niaid-bpimb-apim-dev  # DEV APIM Service
+apimServiceName: niaid-bpimb-apim-qa  # QA APIM Service
 namedValues:
 loggers:
 diagnostics:
@@ -21,10 +21,6 @@ backends:
 # 
 # WSDL APIs must be deployed and managed manually through the Azure Portal.
 # 
-# Historical SOAP APIs that have been removed from this repository:
-# - nihtrainingws: Deleted from dev environment and cleaned up from repo
-# - numberconversion: Deleted from dev environment and cleaned up from repo
-#
 # For future SOAP API management:
 # - Deploy manually through Azure Portal APIM interface
 # - Do not add SOAP/WSDL specification files to this repository

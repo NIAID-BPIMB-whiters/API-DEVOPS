@@ -136,10 +136,16 @@ Each API in `apimartifacts/apis/` contains:
   - Resource Group: `niaid-bpimb-apim-qa-rg`
   - Region: `eastus2`
   - SKU: `Developer`
-  - Network: External (⏳ **Migration to Internal VNet pending**)
-  - Gateway: `niaid-bpimb-apim-qa.azure-api.net` (Public IP: `20.15.60.167`)
+  - Network: Internal VNet (`nih-niaid-azurestrides-bpimb-qa-apim-az`)
+  - Gateway: `niaid-bpimb-apim-qa.azure-api.net` (Private IP: `10.180.0.4`)
   - Purpose: QA/Testing environment
-  - **Status**: Configuration in progress
+  - **Status**: ✅ Configured and ready for deployment
+
+- **Application Insights**: `niaid-bpimb-apim-qa-ai`
+  - Resource Group: `niaid-bpimb-apim-qa-rg`
+  - Region: `eastus2`
+  - Instrumentation Key: `6540b7ee-bd2a-4529-9242-d8ca2749a6cd`
+  - Purpose: APIM diagnostics and logging
 
 - **Service Principal**: `github-apidevops-qa`
   - App ID: `7a03a242-6e15-4a00-84a7-a772988a5b71`
@@ -159,10 +165,10 @@ Each API in `apimartifacts/apis/` contains:
 - Test VM Subnet: `dev-commonservices` (`10.179.0.32/27`)
 
 **QA VNet** (`nih-niaid-azurestrides-bpimb-qa-apim-az`):
-- Address Space: `10.180.0.0/24` (planned)
-- APIM Subnet: `qa-apim-subnet` (`10.180.0.0/28`) (planned)
-- Test VM Subnet: `qa-commonservices` (`10.180.0.32/27`) (planned)
-- **Status**: ⏳ In Progress - VNet creation pending
+- Address Space: `10.180.0.0/24`
+- APIM Subnet: `qa-apim-subnet` (`10.180.0.0/28`)
+- Test VM Subnet: `qa-commonservices` (`10.180.0.32/27`)
+- **Status**: ✅ Complete - VNet configured and APIM migrated
 
 ### API Inventory
 

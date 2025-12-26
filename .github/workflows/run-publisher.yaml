@@ -32,41 +32,81 @@ jobs:
     outputs:
       commit_id: ${{ steps.commit.outputs.commit_id }}
 
-  #Deploy to PRODUCTION with Commit ID (only changed artifacts from last commit)
-  # Pipeline: DAIDS_DEV → Repository → DEV (PRODUCTION)
-  Deploy-To-PROD-With-Commit-ID:
+  #Deploy to DEV with Commit ID (only changed artifacts from last commit)
+  # Pipeline: DAIDS_DEV → Repository → DEV → QA
+  Deploy-To-DEV-With-Commit-ID:
     if: (github.event.inputs.COMMIT_ID_CHOICE == 'publish-artifacts-in-last-commit' || github.event.inputs.COMMIT_ID_CHOICE == '')
     needs: get-commit
     uses: ./.github/workflows/run-publisher-with-env.yaml
     with:
-      API_MANAGEMENT_ENVIRONMENT: dev # Deploys to PRODUCTION APIM service (niaid-bpimb-apim-dev)
+      API_MANAGEMENT_ENVIRONMENT: dev # Deploys to DEV APIM service (niaid-bpimb-apim-dev)
       COMMIT_ID: ${{ needs.get-commit.outputs.commit_id }}
-      CONFIGURATION_YAML_PATH: configuration.production.yaml # Production deployment configuration
+      CONFIGURATION_YAML_PATH: configuration.dev.yaml # DEV deployment configuration
       API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts # Artifacts extracted from DAIDS_DEV environment
     secrets: inherit
 
-  #Deploy to PRODUCTION without Commit ID (all artifacts in repo)
-  # Use this option for full redeployment of all artifacts to PRODUCTION
-  Deploy-To-PROD-Without-Commit-ID:
+  #Deploy to DEV without Commit ID (all artifacts in repo)
+  # Use this option for full redeployment of all artifacts to DEV
+  Deploy-To-DEV-Without-Commit-ID:
     if: ( github.event.inputs.COMMIT_ID_CHOICE == 'publish-all-artifacts-in-repo' )
     needs: get-commit
     uses: ./.github/workflows/run-publisher-with-env.yaml
     with:
-      API_MANAGEMENT_ENVIRONMENT: dev # Deploys to PRODUCTION APIM service (niaid-bpimb-apim-dev)
-      CONFIGURATION_YAML_PATH: configuration.production.yaml # Production deployment configuration
+      API_MANAGEMENT_ENVIRONMENT: dev # Deploys to DEV APIM service (niaid-bpimb-apim-dev)
+      CONFIGURATION_YAML_PATH: configuration.dev.yaml # DEV deployment configuration
       API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts # All artifacts extracted from DAIDS_DEV environment
     secrets: inherit
 
-  # Run full test suite on PRODUCTION after successful deployment
-  Test-PROD-After-Deploy:
-    needs: [Deploy-To-PROD-With-Commit-ID, Deploy-To-PROD-Without-Commit-ID]
-    if: always() && (needs.Deploy-To-PROD-With-Commit-ID.result == 'success' || needs.Deploy-To-PROD-Without-Commit-ID.result == 'success')
+  # Run full test suite on DEV after successful deployment
+  Test-DEV-After-Deploy:
+    needs: [Deploy-To-DEV-With-Commit-ID, Deploy-To-DEV-Without-Commit-ID]
+    if: always() && (needs.Deploy-To-DEV-With-Commit-ID.result == 'success' || needs.Deploy-To-DEV-Without-Commit-ID.result == 'success')
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger API tests in production
+      - name: Trigger API tests in DEV
         run: |
           gh workflow run test-apis-ephemeral.yaml \
             -f ENVIRONMENT=dev \
+            -f TEST_TYPE=full-suite \
+            --repo ${{ github.repository }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  #Deploy to QA with Commit ID (only changed artifacts from last commit)
+  # Pipeline: DAIDS_DEV → Repository → DEV → QA
+  Deploy-To-QA-With-Commit-ID:
+    if: (github.event.inputs.COMMIT_ID_CHOICE == 'publish-artifacts-in-last-commit' || github.event.inputs.COMMIT_ID_CHOICE == '') && needs.Test-DEV-After-Deploy.result == 'success'
+    needs: [get-commit, Test-DEV-After-Deploy]
+    uses: ./.github/workflows/run-publisher-with-env.yaml
+    with:
+      API_MANAGEMENT_ENVIRONMENT: qa # Deploys to QA APIM service (niaid-bpimb-apim-qa)
+      COMMIT_ID: ${{ needs.get-commit.outputs.commit_id }}
+      CONFIGURATION_YAML_PATH: configuration.qa.yaml # QA deployment configuration
+      API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts # Artifacts extracted from DAIDS_DEV environment
+    secrets: inherit
+
+  #Deploy to QA without Commit ID (all artifacts in repo)
+  # Use this option for full redeployment of all artifacts to QA
+  Deploy-To-QA-Without-Commit-ID:
+    if: ( github.event.inputs.COMMIT_ID_CHOICE == 'publish-all-artifacts-in-repo' ) && needs.Test-DEV-After-Deploy.result == 'success'
+    needs: [get-commit, Test-DEV-After-Deploy]
+    uses: ./.github/workflows/run-publisher-with-env.yaml
+    with:
+      API_MANAGEMENT_ENVIRONMENT: qa # Deploys to QA APIM service (niaid-bpimb-apim-qa)
+      CONFIGURATION_YAML_PATH: configuration.qa.yaml # QA deployment configuration
+      API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts # All artifacts extracted from DAIDS_DEV environment
+    secrets: inherit
+
+  # Run full test suite on QA after successful deployment
+  Test-QA-After-Deploy:
+    needs: [Deploy-To-QA-With-Commit-ID, Deploy-To-QA-Without-Commit-ID]
+    if: always() && (needs.Deploy-To-QA-With-Commit-ID.result == 'success' || needs.Deploy-To-QA-Without-Commit-ID.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger API tests in QA
+        run: |
+          gh workflow run test-apis-ephemeral.yaml \
+            -f ENVIRONMENT=qa \
             -f TEST_TYPE=full-suite \
             --repo ${{ github.repository }}
         env:
