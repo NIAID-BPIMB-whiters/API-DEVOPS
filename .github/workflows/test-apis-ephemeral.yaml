@@ -250,14 +250,34 @@ jobs:
             --tenant ${{ secrets.AZURE_TENANT_ID }}
           az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       
-      - name: Delete test VM
+      - name: Delete test VM and NIC
         run: |
-          echo "Deleting VM: ${{ needs.create-test-vm.outputs.vm-name }}"
+          VM_NAME="${{ needs.create-test-vm.outputs.vm-name }}"
+          RG="${{ needs.create-test-vm.outputs.resource-group }}"
           
+          echo "Deleting VM: $VM_NAME"
+          
+          # Get NIC name before deleting VM
+          NIC_ID=$(az vm show --resource-group "$RG" --name "$VM_NAME" --query "networkProfile.networkInterfaces[0].id" -o tsv 2>/dev/null || echo "")
+          if [ -n "$NIC_ID" ]; then
+            NIC_NAME=$(basename "$NIC_ID")
+            echo "Found NIC: $NIC_NAME"
+          fi
+          
+          # Delete VM
           az vm delete \
-            --resource-group "${{ needs.create-test-vm.outputs.resource-group }}" \
-            --name "${{ needs.create-test-vm.outputs.vm-name }}" \
+            --resource-group "$RG" \
+            --name "$VM_NAME" \
             --yes \
             --no-wait
           
-          echo "VM deletion initiated"
+          # Delete NIC if found
+          if [ -n "$NIC_NAME" ]; then
+            echo "Deleting NIC: $NIC_NAME"
+            az network nic delete \
+              --resource-group "$RG" \
+              --name "$NIC_NAME" \
+              --no-wait
+          fi
+          
+          echo "VM and NIC deletion initiated"
