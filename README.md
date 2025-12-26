@@ -133,18 +133,19 @@ Each API in `apimartifacts/apis/` contains:
 
 ### API Inventory
 
-Currently managing **8 APIs**:
+Currently managing **7 APIs**:
 
 | API Name | Purpose | Path |
 |----------|---------|------|
 | `crms-api-qa` | Clinical Research Management System (QA) | `/crms-api-qa` |
 | `demo-conference-api` | Demo API for conference showcase | `/conference` |
 | `echo-api` | Testing/debugging echo service | `/echo` |
-| `itpms-chat-api` | IT Project Management chat integration | `/itpms-chat` |
 | `merlin-db` | Merlin database API | `/merlin-db` |
 | `opentext` | OpenText document management | `/opentext` |
 | `otcs-mcp-server` | OpenText Content Server MCP | `/otcs-mcp` |
 | `test` | General testing API | `/test` |
+
+> **Note**: `itpms-chat-api` was removed on December 26, 2025 as part of POC cleanup. See [POC-EXPORT-niaid-azure-oaipoc-api-fa.md](POC-EXPORT-niaid-azure-oaipoc-api-fa.md) for archived configuration.
 
 ---
 
@@ -798,22 +799,23 @@ gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in
 
 **APIM Named Values Security (Priority: Medium)**
 
-- [x] **Move Secret Named Values to Key Vault** 🔄 **IN PROGRESS** - December 24, 2025
-  - `niaid-azure-oaipoc-api-fa-key` ✅
-  - `6671ebaafb42680790aa5617` (Logger-Credentials) ✅
+- [x] **Move Secret Named Values to Key Vault** 🔄 **IN PROGRESS** - December 26, 2025
+  - ~~`niaid-azure-oaipoc-api-fa-key`~~ ✅ **REMOVED** (POC cleanup, December 26, 2025)
+  - `6671ebaafb42680790aa5617` (Logger-Credentials) ⏸️ **PENDING MIGRATION**
   - ~~`OTCSTICKET`~~ (Deleted from DEV APIM)
   
-  **Progress**:
+  **Progress** (1 secret remaining):
   - ✅ Phase 1.1: Retrieved secret values from source systems
   - ✅ Phase 1.2: Created Key Vault in DEV (`kv-niaid-apim-dev`)
-  - ✅ Phase 1.3: Stored secrets in Key Vault
+  - ✅ Phase 1.3: Stored Logger-Credentials secret in Key Vault
   - ✅ Phase 1.4: Enabled APIM managed identity (Principal: `94d1c4e6-c81e-46b9-aa5a-5cbe95cd568d`)
   - ✅ Phase 1.5: Granted APIM "Key Vault Secrets User" role
-  - ⏸️ Phase 1.6: Update APIM named values to reference Key Vault (PENDING)
-  - ⏸️ Phase 2: Test APIs in DEV
+  - ⏸️ Phase 1.6: Update APIM named value to reference Key Vault (PENDING - awaiting developer testing)
+  - ⏸️ Phase 2: Test Application Insights logging in DEV
   - ⏸️ Phase 3: Extract and deploy to PROD via GitOps
   
-  **Detailed Plan**: See [NAMED-VALUES-KEYVAULT-MIGRATION.md](NAMED-VALUES-KEYVAULT-MIGRATION.md)
+  **Detailed Plan**: See [NAMED-VALUES-KEYVAULT-MIGRATION.md](NAMED-VALUES-KEYVAULT-MIGRATION.md)  
+  **POC Cleanup**: See [POC-EXPORT-niaid-azure-oaipoc-api-fa.md](POC-EXPORT-niaid-azure-oaipoc-api-fa.md)
   
   **Impact**: Improves secret management security. Maintains consistency across environments.
 
@@ -842,8 +844,8 @@ gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in
 
 - [ ] **Add Authentication to Backends**
   - `webapp_nih-niaid-bpimb-mcp-opentext-wa`
-  - `niaid-azure-oaipoc-api-fa`
   - `opentext-mcp-sop-policies-backend-d9b07a2f-8947-ecf4-f7c5-c85ad690a9ca`
+  - ~~`niaid-azure-oaipoc-api-fa`~~ (Removed - POC cleanup, December 26, 2025)
   
   **RISK WITH NO CONSUMERS**: 🟡 **MEDIUM** - Still requires backend owner coordination
   
