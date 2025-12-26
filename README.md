@@ -788,7 +788,7 @@ gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in
 ### 1. Azure Advisor Optimization
 **Priority**: Medium  
 **Status**: 🔄 In Progress  
-**Last Reviewed**: December 24, 2025
+**Last Reviewed**: December 26, 2025
 
 **Summary**: 13 security recommendations identified. Safe to implement: 8 items. Requires planning: 5 items.
 
@@ -809,27 +809,32 @@ gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in
   - Logging: AuditEvent + AllMetrics
   - Impact: Enables audit logging and metrics. No functional impact, improves security monitoring.
 
+**Application Insights Monitoring (Priority: High)**
+
+- [x] **Migrate to Dedicated Application Insights** ✅ **COMPLETED** - December 26, 2025
+  - Created `apim-daids-connect-ai` in DEV (nih-niaid-avidpoc-dev-rg)
+  - Created `niaid-bpimb-apim-dev-ai` in PROD (niaid-bpimb-apim-dev-rg)
+  - Updated all diagnostics (global + API-specific) to use new loggers
+  - Removed dependency on POC Application Insights
+  - Impact: Proper resource ownership, improved monitoring infrastructure, eliminated POC dependencies
+
 **APIM Named Values Security (Priority: Medium)**
 
-- [x] **Move Secret Named Values to Key Vault** 🔄 **IN PROGRESS** - December 26, 2025
+- [x] **Move Secret Named Values to Key Vault** ✅ **NO LONGER NEEDED** - December 26, 2025
   - ~~`niaid-azure-oaipoc-api-fa-key`~~ ✅ **REMOVED** (POC cleanup, December 26, 2025)
-  - `6671ebaafb42680790aa5617` (Logger-Credentials) ⏸️ **PENDING MIGRATION**
-  - ~~`OTCSTICKET`~~ (Deleted from DEV APIM)
+  - ~~`6671ebaafb42680790aa5617`~~ ✅ **REMOVED** (POC logger replaced with dedicated App Insights)
+  - ~~`OTCSTICKET`~~ ✅ **REMOVED** (Deleted from DEV APIM)
   
-  **Progress** (1 secret remaining):
-  - ✅ Phase 1.1: Retrieved secret values from source systems
-  - ✅ Phase 1.2: Created Key Vault in DEV (`kv-niaid-apim-dev`)
-  - ✅ Phase 1.3: Stored Logger-Credentials secret in Key Vault
-  - ✅ Phase 1.4: Enabled APIM managed identity (Principal: `94d1c4e6-c81e-46b9-aa5a-5cbe95cd568d`)
-  - ✅ Phase 1.5: Granted APIM "Key Vault Secrets User" role
-  - ⏸️ Phase 1.6: Update APIM named value to reference Key Vault (PENDING - awaiting developer testing)
-  - ⏸️ Phase 2: Test Application Insights logging in DEV
-  - ⏸️ Phase 3: Extract and deploy to PROD via GitOps
+  **Resolution**: Instead of migrating POC secrets to Key Vault, created dedicated Application Insights resources:
+  - ✅ DEV: `apim-daids-connect-ai` (using connection string in named value `694ed3c1b949c31f3c8ec979`)
+  - ✅ PROD: `niaid-bpimb-apim-dev-ai` (using connection string in named value `694ed3c1b949c31f3c8ec979`)
+  - ✅ Eliminated dependency on POC Application Insights (`nih-niaid-bpimb-sebapi-poc-dev-eastus-rg`)
+  - ✅ No Key Vault migration required - connection strings stored as inline secrets
   
-  **Detailed Plan**: See [NAMED-VALUES-KEYVAULT-MIGRATION.md](NAMED-VALUES-KEYVAULT-MIGRATION.md)  
+  **Migration Documentation**: ~~[NAMED-VALUES-KEYVAULT-MIGRATION.md](NAMED-VALUES-KEYVAULT-MIGRATION.md)~~ (obsolete)  
   **POC Cleanup**: See [POC-EXPORT-niaid-azure-oaipoc-api-fa.md](POC-EXPORT-niaid-azure-oaipoc-api-fa.md)
   
-  **Impact**: Improves secret management security. Maintains consistency across environments.
+  **Impact**: Improved monitoring infrastructure with proper resource ownership. Simplified secret management.
 
 #### ⚠️ Requires Evaluation (Potential Functionality Impact)
 
