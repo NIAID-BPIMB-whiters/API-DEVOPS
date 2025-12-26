@@ -101,7 +101,7 @@ Each API in `apimartifacts/apis/` contains:
 
 ### Azure Resources
 
-#### Development Environment
+#### DAIDS_DEV Environment (Extractor Source)
 - **APIM Service**: `apim-daids-connect`
   - Resource Group: `nih-niaid-avidpoc-dev-rg`
   - Region: `eastus`
@@ -116,7 +116,7 @@ Each API in `apimartifacts/apis/` contains:
   - Instrumentation Key: `98066d90-6565-4993-b071-c5a453f2ce44`
   - Purpose: APIM diagnostics and logging
 
-#### Production Environment
+#### DEV Environment (Deployment Target)
 - **APIM Service**: `niaid-bpimb-apim-dev`
   - Resource Group: `niaid-bpimb-apim-dev-rg`
   - Region: `eastus2`
@@ -131,17 +131,38 @@ Each API in `apimartifacts/apis/` contains:
   - Instrumentation Key: `369236ca-f1b0-43f7-a58e-036094365a7c`
   - Purpose: APIM diagnostics and logging
 
+#### QA Environment
+- **APIM Service**: `niaid-bpimb-apim-qa`
+  - Resource Group: `niaid-bpimb-apim-qa-rg`
+  - Region: `eastus2`
+  - SKU: `Developer`
+  - Network: External (⏳ **Migration to Internal VNet pending**)
+  - Gateway: `niaid-bpimb-apim-qa.azure-api.net` (Public IP: `20.15.60.167`)
+  - Purpose: QA/Testing environment
+  - **Status**: Configuration in progress
+
+- **Service Principal**: `github-apidevops-qa`
+  - App ID: `7a03a242-6e15-4a00-84a7-a772988a5b71`
+  - Purpose: Dedicated QA environment access
+  - Created: December 26, 2025
+
 #### Network Configuration
 
-**Development VNet** (`nih-niaid-azurestrides-dev-apim-az`):
+**DAIDS_DEV VNet** (`nih-niaid-azurestrides-dev-apim-az`):
 - Address Space: `10.178.57.0/24`
 - APIM Subnet: `niaid-apim` (`10.178.57.48/28`)
 - Test VM Subnet: `niaid-commonservices-test` (`10.178.57.64/27`)
 
-**Production VNet** (`nih-niaid-azurestrides-bpimb-dev-apim-az`):
+**DEV VNet** (`nih-niaid-azurestrides-bpimb-dev-apim-az`):
 - Address Space: `10.179.0.0/24`
 - APIM Subnet: `dev-apim-subnet` (`10.179.0.0/28`)
 - Test VM Subnet: `dev-commonservices` (`10.179.0.32/27`)
+
+**QA VNet** (`nih-niaid-azurestrides-bpimb-qa-apim-az`):
+- Address Space: `10.180.0.0/24` (planned)
+- APIM Subnet: `qa-apim-subnet` (`10.180.0.0/28`) (planned)
+- Test VM Subnet: `qa-commonservices` (`10.180.0.32/27`) (planned)
+- **Status**: ⏳ In Progress - VNet creation pending
 
 ### API Inventory
 
@@ -165,21 +186,21 @@ Currently managing **7 APIs**:
 
 ### 1. Extract Artifacts (`run-extractor.yaml`)
 
-**Purpose**: Extract APIM artifacts from DEV environment to Git repository
+**Purpose**: Extract APIM artifacts from DAIDS_DEV environment to Git repository
 
 **Trigger**: Manual workflow dispatch
 
 **Pipeline Flow**:
 ```
-DEV APIM → Extractor Tool → apimartifacts/ folder → Git commit
+DAIDS_DEV APIM (apim-daids-connect) → Extractor Tool → apimartifacts/ folder → Git commit
 ```
 
 **Configuration Options**:
-- **Extract All APIs**: Extracts all artifacts from DEV APIM
+- **Extract All APIs**: Extracts all artifacts from DAIDS_DEV APIM
 - **Use configuration.extractor.yaml**: Selectively extract specific APIs/artifacts
 
 **Environment Variables**:
-- Uses `dev` environment secrets
+- Uses `daids_dev` environment secrets
 - `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`
 - `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP_NAME`
 - `API_MANAGEMENT_SERVICE_NAME`
@@ -197,9 +218,9 @@ gh workflow run run-extractor.yaml -f CONFIGURATION_YAML_PATH="configuration.ext
 
 ---
 
-### 2. Publish to Production (`run-publisher.yaml`)
+### 2. Publish to DEV (`run-publisher.yaml`)
 
-**Purpose**: Deploy artifacts from repository to PRODUCTION APIM
+**Purpose**: Deploy artifacts from repository to DEV APIM
 
 **Trigger**: 
 - Push to `main` branch (automatic)
@@ -207,7 +228,7 @@ gh workflow run run-extractor.yaml -f CONFIGURATION_YAML_PATH="configuration.ext
 
 **Pipeline Flow**:
 ```
-Git Repository (apimartifacts/) → Publisher Tool → PROD APIM → Automated Tests
+Git Repository (apimartifacts/) → Publisher Tool → DEV APIM (niaid-bpimb-apim-dev) → Automated Tests
 ```
 
 **Deployment Modes**:
@@ -575,6 +596,16 @@ gh run list --workflow=test-apis-ephemeral.yaml
 
 Configure in **Settings → Secrets and variables → Actions → Environments**
 
+#### DAIDS_DEV Environment Secrets
+| Secret Name | Description |
+|-------------|-------------|
+| `AZURE_CLIENT_ID` | Service Principal Application ID |
+| `AZURE_CLIENT_SECRET` | Service Principal Secret |
+| `AZURE_TENANT_ID` | Azure AD Tenant ID |
+| `AZURE_SUBSCRIPTION_ID` | Azure Subscription ID |
+| `AZURE_RESOURCE_GROUP_NAME` | DAIDS DEV Resource Group (`nih-niaid-avidpoc-dev-rg`) |
+| `API_MANAGEMENT_SERVICE_NAME` | DAIDS DEV APIM Name (`apim-daids-connect`) |
+
 #### DEV Environment Secrets
 | Secret Name | Description |
 |-------------|-------------|
@@ -582,32 +613,43 @@ Configure in **Settings → Secrets and variables → Actions → Environments**
 | `AZURE_CLIENT_SECRET` | Service Principal Secret |
 | `AZURE_TENANT_ID` | Azure AD Tenant ID |
 | `AZURE_SUBSCRIPTION_ID` | Azure Subscription ID |
-| `AZURE_RESOURCE_GROUP_NAME` | DEV Resource Group (`nih-niaid-avidpoc-dev-rg`) |
-| `API_MANAGEMENT_SERVICE_NAME` | DEV APIM Name (`apim-daids-connect`) |
+| `AZURE_RESOURCE_GROUP_NAME` | DEV Resource Group (`niaid-bpimb-apim-dev-rg`) |
+| `API_MANAGEMENT_SERVICE_NAME` | DEV APIM Name (`niaid-bpimb-apim-dev`) |
 
-#### PROD Environment Secrets
+#### QA Environment Secrets
 | Secret Name | Description |
 |-------------|-------------|
 | `AZURE_CLIENT_ID` | Service Principal Application ID |
 | `AZURE_CLIENT_SECRET` | Service Principal Secret |
 | `AZURE_TENANT_ID` | Azure AD Tenant ID |
 | `AZURE_SUBSCRIPTION_ID` | Azure Subscription ID |
-| `AZURE_RESOURCE_GROUP_NAME` | PROD Resource Group (`niaid-bpimb-apim-dev-rg`) |
-| `API_MANAGEMENT_SERVICE_NAME` | PROD APIM Name (`niaid-bpimb-apim-dev`) |
+| `AZURE_RESOURCE_GROUP_NAME` | QA Resource Group (`niaid-bpimb-apim-qa-rg`) |
+| `API_MANAGEMENT_SERVICE_NAME` | QA APIM Name (`niaid-bpimb-apim-qa`) |
 
 ### Service Principal Configuration
 
-**PROD Environment** (`sp-niaid-apim-prod`):
-- **App ID**: `db9f206a-1f88-4ba7-b702-c3230bfd1e14`
+**DEV Environment** (`github-apidevops-dev`):
+- **App ID**: `95ca13e0-4df1-4df7-9090-7ac57745a273`
+- **Created**: December 26, 2025
 - **Roles**:
-  - `API Management Service Contributor` on `niaid-bpimb-apim-dev` APIM service
-  - `Reader` on `niaid-bpimb-apim-dev-rg` resource group (for Azure Advisor)
+  - `API Management Service Contributor` on `niaid-bpimb-apim-dev-rg` resource group
+  - `Reader` on `niaid-bpimb-apim-dev-rg` (for Azure Advisor)
   - `Contributor` on `nih-niaid-azurestrides-dev-rg-admin-az` (for test VMs)
 
-**DEV Environment** (`niaid-bpimb-apim-old-dev`):
-- **App ID**: `78b11607-408e-4027-9b34-d59bf14cae12`
+**DAIDS_DEV Environment** (`github-apidevops-workflow`):
+- **App ID**: `a763a856-d2ae-43ab-b686-0cf24a5da690`
 - **Roles**:
-  - `API Management Service Reader Role` on `apim-daids-connect` APIM service
+  - Permissions on `nih-niaid-avidpoc-dev-rg` (DAIDS DEV APIM resource group)
+  - `Contributor` on `nih-niaid-azurestrides-dev-rg-admin-az` (for VNet/NSG and test VMs)
+
+**QA Environment** (`github-apidevops-qa`):
+- **App ID**: `7a03a242-6e15-4a00-84a7-a772988a5b71`
+- **Created**: December 26, 2025
+- **Roles**:
+  - `API Management Service Contributor` on `niaid-bpimb-apim-qa-rg` resource group
+  - `Contributor` on `nih-niaid-azurestrides-dev-rg-admin-az` (for VNet/NSG and test VMs)
+
+**Best Practice**: Each environment uses a dedicated service principal for isolation and security. This prevents accidental cross-environment changes and enables per-environment access control.
 
 ### Required RBAC Roles
 

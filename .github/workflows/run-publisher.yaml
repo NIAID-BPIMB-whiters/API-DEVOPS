@@ -33,16 +33,16 @@ jobs:
       commit_id: ${{ steps.commit.outputs.commit_id }}
 
   #Deploy to PRODUCTION with Commit ID (only changed artifacts from last commit)
-  # Pipeline: DEV  Repository  PRODUCTION
+  # Pipeline: DAIDS_DEV → Repository → DEV (PRODUCTION)
   Deploy-To-PROD-With-Commit-ID:
     if: (github.event.inputs.COMMIT_ID_CHOICE == 'publish-artifacts-in-last-commit' || github.event.inputs.COMMIT_ID_CHOICE == '')
     needs: get-commit
     uses: ./.github/workflows/run-publisher-with-env.yaml
     with:
-      API_MANAGEMENT_ENVIRONMENT: prod # Deploys to PRODUCTION APIM service (niaid-bpimb-apim-dev)
+      API_MANAGEMENT_ENVIRONMENT: dev # Deploys to PRODUCTION APIM service (niaid-bpimb-apim-dev)
       COMMIT_ID: ${{ needs.get-commit.outputs.commit_id }}
       CONFIGURATION_YAML_PATH: configuration.production.yaml # Production deployment configuration
-      API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts # Artifacts extracted from DEV environment
+      API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts # Artifacts extracted from DAIDS_DEV environment
     secrets: inherit
 
   #Deploy to PRODUCTION without Commit ID (all artifacts in repo)
@@ -52,9 +52,9 @@ jobs:
     needs: get-commit
     uses: ./.github/workflows/run-publisher-with-env.yaml
     with:
-      API_MANAGEMENT_ENVIRONMENT: prod # Deploys to PRODUCTION APIM service (niaid-bpimb-apim-dev)
+      API_MANAGEMENT_ENVIRONMENT: dev # Deploys to PRODUCTION APIM service (niaid-bpimb-apim-dev)
       CONFIGURATION_YAML_PATH: configuration.production.yaml # Production deployment configuration
-      API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts # All artifacts extracted from DEV environment
+      API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts # All artifacts extracted from DAIDS_DEV environment
     secrets: inherit
 
   # Run full test suite on PRODUCTION after successful deployment
@@ -66,7 +66,7 @@ jobs:
       - name: Trigger API tests in production
         run: |
           gh workflow run test-apis-ephemeral.yaml \
-            -f ENVIRONMENT=prod \
+            -f ENVIRONMENT=dev \
             -f TEST_TYPE=full-suite \
             --repo ${{ github.repository }}
         env:

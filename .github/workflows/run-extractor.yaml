@@ -21,7 +21,7 @@ env:
 jobs:
   extract:
     runs-on: ubuntu-latest
-    environment: dev # change this to match the dev environment created in settings 
+    environment: daids_dev # Extractor source: apim-daids-connect (DEV)
     steps:
       - uses: actions/checkout@v4
       

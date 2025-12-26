@@ -12,13 +12,14 @@ on:
   workflow_dispatch:
     inputs:
       ENVIRONMENT:
-        description: 'Environment to test (dev or prod)'
+        description: 'Environment to test (daids_dev or dev or qa)'
         required: true
         type: choice
         options:
+          - daids_dev
           - dev
-          - prod
-        default: 'prod'
+          - qa
+        default: 'dev'
       TEST_TYPE:
         description: 'Type of test to run'
         required: true
