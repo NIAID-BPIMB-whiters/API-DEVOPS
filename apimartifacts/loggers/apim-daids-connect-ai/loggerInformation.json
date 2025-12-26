@@ -1,0 +1,10 @@
+{
+  "properties": {
+    "loggerType": "applicationInsights",
+    "credentials": {
+      "connectionString": "{{Logger-Credentials--694ed3c1b949c31f3c8ec97a}}"
+    },
+    "isBuffered": true,
+    "resourceId": "/subscriptions/18fc6b8b-44fa-47d7-ae51-36766ac67165/resourceGroups/nih-niaid-avidpoc-dev-rg/providers/Microsoft.Insights/components/apim-daids-connect-ai"
+  }
+}
