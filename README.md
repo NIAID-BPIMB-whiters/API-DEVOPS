@@ -1064,85 +1064,147 @@ Add Azure Advisor checks to your CI/CD pipeline for continuous compliance monito
 
 ### 2. Configure QA Environment
 **Priority**: High  
-**Status**: ⏳ Pending
+**Status**: ✅ **COMPLETED** - December 26, 2025
 
-**Existing Resources**:
+**QA Infrastructure**:
 - Resource Group: `niaid-bpimb-apim-qa-rg`
 - APIM Instance: `niaid-bpimb-apim-qa`
+- VNet: `nih-niaid-azurestrides-bpimb-qa-apim-az` (10.180.0.0/24)
+- Private IP: `10.180.0.4`
+- Application Insights: `niaid-bpimb-apim-qa-ai`
+- Service Principal: `github-apidevops-qa` (App ID: 7a03a242-6e15-4a00-84a7-a772988a5b71)
 
-**Configuration Tasks**:
-- [ ] Verify/identify network resource group for QA environment
-- [ ] Create or configure VNet for QA APIM (Internal VNet mode)
-  - VNet naming convention: `nih-niaid-azurestrides-bpimb-qa-apim-az`
-  - Address space (suggested): `10.180.0.0/24`
-  - APIM subnet: `/28` (16 IPs)
-  - Test VM subnet: `/27` (32 IPs)
-- [ ] Configure NSG rules (matching prod configuration)
-- [ ] Configure Private DNS Zone
-- [ ] Migrate QA APIM to Internal VNet mode (if currently External)
-- [ ] Create GitHub environment secrets for QA
-  - `AZURE_CLIENT_ID`
-  - `AZURE_CLIENT_SECRET`
-  - `AZURE_TENANT_ID`
-  - `AZURE_SUBSCRIPTION_ID`
-  - `AZURE_RESOURCE_GROUP_NAME`
-  - `API_MANAGEMENT_SERVICE_NAME`
-- [ ] Grant service principal permissions on QA resources
-
-**Reference**: Follow same process as Production VNet Migration (completed December 23-24, 2025)
+**Completed Tasks**:
+- [x] Created QA VNet with APIM subnet (10.180.0.0/28) and test VM subnet (10.180.0.32/27)
+- [x] Configured NSG rules (matching DEV configuration)
+- [x] Configured Private DNS Zone and VNet link
+- [x] Migrated QA APIM to Internal VNet mode
+- [x] Created Application Insights for QA environment
+- [x] Created GitHub environment secrets for QA
+- [x] Granted service principal permissions on QA resources
+- [x] Created configuration.qa.yaml
 
 ---
 
-### 3. Update Deployment Pipeline (DEV → PROD → QA)
+### 3. Update Deployment Pipeline (DAIDS_DEV → DEV → QA)
 **Priority**: High  
-**Status**: ⏳ Pending
+**Status**: ✅ **COMPLETED** - December 26, 2025
 
 **Current Pipeline**:
 ```
-DEV (apim-daids-connect) → Repository → PROD (niaid-bpimb-apim-dev)
+DAIDS_DEV (apim-daids-connect) → Repository → DEV (niaid-bpimb-apim-dev) → QA (niaid-bpimb-apim-qa)
 ```
 
-**Target Pipeline**:
-```
-DEV (apim-daids-connect) → Repository → PROD (niaid-bpimb-apim-dev) → QA (niaid-bpimb-apim-qa)
-```
+**Completed Tasks**:
 
-**Implementation Tasks**:
+- [x] **Created QA Configuration File**
+  - Created `configuration.qa.yaml` for QA deployments
+  - Renamed `configuration.production.yaml` to `configuration.dev.yaml`
 
-- [ ] **Create QA Configuration File**
-  - Create `configuration.qa.yaml` (similar to `configuration.production.yaml`)
-  - Configure QA-specific settings
+- [x] **Updated `run-publisher.yaml` Workflow**
+  - Added QA deployment jobs (with and without commit ID)
+  - Configured test gates: QA deployment only proceeds if DEV tests pass
+  - Sequential dependency: DAIDS_DEV → Repo → DEV → (tests) → QA
 
-- [ ] **Update `run-publisher.yaml` Workflow**
-  - Add QA deployment job after PROD deployment succeeds
-  - Configure environment-specific deployment to QA
-  - Add sequential dependency: DEV → Repo → PROD → QA
+- [x] **Added QA Testing Integration**
+  - Updated `test-apis-ephemeral.yaml` for QA environment
+  - Configured QA VNet/subnet details for ephemeral VM testing
+  - Added post-deployment testing for QA
 
-- [ ] **Add QA Testing Integration**
-  - Update `test-apis-ephemeral.yaml` for QA environment
-  - Configure QA VNet/subnet details for ephemeral VM testing
-  - Add post-deployment testing for QA
-
-- [ ] **Workflow Sequence**
+- [x] **Workflow Sequence**
   ```yaml
-  1. Extract from DEV
-  2. Deploy to PROD
-  3. Test PROD (automated)
-  4. If PROD tests pass → Deploy to QA
+  1. Extract from DAIDS_DEV
+  2. Deploy to DEV
+  3. Test DEV (automated)
+  4. If DEV tests pass → Deploy to QA
   5. Test QA (automated)
   6. Report results
   ```
 
-- [ ] **Update Documentation**
-  - Update README with QA environment details
-  - Document QA testing procedures
-  - Update workflow diagrams
+- [x] **Updated Documentation**
+  - Updated README with QA environment details
+  - Renamed environments for clarity (daids_dev, dev, qa)
 
-**Benefits**:
-- ✅ Production validation before QA deployment
-- ✅ Automated testing at each stage
-- ✅ Complete environment promotion path
-- ✅ Reduced risk of QA environment issues
+**Next Steps**:
+- [ ] Validate full pipeline deployment with NIC cleanup fixes
+- [ ] Monitor QA deployment success rate
+
+---
+
+### 4. Test Complete Deployment Pipeline
+**Priority**: High  
+**Status**: ⏳ Pending
+
+**Objective**: Validate full DAIDS_DEV → DEV → QA pipeline with NIC cleanup fixes
+
+**Tasks**:
+- [ ] Run publisher workflow: `gh workflow run run-publisher.yaml`
+- [ ] Verify DEV deployment succeeds
+- [ ] Verify DEV tests pass with proper NIC cleanup
+- [ ] Verify QA deployment proceeds after successful DEV tests
+- [ ] Verify QA tests pass
+- [ ] Confirm ephemeral test VMs and NICs are properly cleaned up
+
+**Validation Points**:
+- VM and NIC deletion completes successfully
+- No IP address exhaustion in dev-commonservices subnet
+- Test gates prevent QA deployment if DEV tests fail
+- All APIs accessible in both DEV and QA environments
+
+---
+
+### 5. Explore API Versioning Strategy
+**Priority**: Medium  
+**Status**: ⏳ Pending
+
+**Objective**: Research and implement versioning approach for APIs during active development
+
+**Tasks**:
+- [ ] Research versioning approaches in Azure APIM
+  - URL path versioning (e.g., `/v1/api`, `/v2/api`)
+  - Header-based versioning
+  - Query parameter versioning
+- [ ] Document semantic versioning practices
+- [ ] Define backwards compatibility requirements
+- [ ] Create guidelines for handling breaking changes during development
+- [ ] Establish version lifecycle management (deprecation, sunset policies)
+- [ ] Document recommended practices for the team
+
+**Considerations**:
+- Impact on existing APIs
+- Consumer communication strategy
+- Integration with CI/CD pipeline
+- Testing strategy for multiple versions
+
+---
+
+### 6. Test DEV Environment Restoration
+**Priority**: Medium  
+**Status**: ⏳ Pending
+
+**Objective**: Validate disaster recovery capability by restoring DEV APIM from repository artifacts
+
+**Tasks**:
+- [ ] Document current DEV environment state
+- [ ] Create test restoration procedure
+- [ ] Test publisher deployment to clean/reset DEV environment
+- [ ] Verify all configurations restored from Git:
+  - APIs and operations
+  - Policies (global and API-specific)
+  - Backends
+  - Named values
+  - Loggers and diagnostics
+  - Products and subscriptions
+- [ ] Identify any manual steps required
+- [ ] Document limitations or gaps in GitOps coverage
+- [ ] Create disaster recovery runbook
+
+**Success Criteria**:
+- DEV environment fully functional after restoration
+- All APIs operational
+- All backend connections working
+- No manual configuration required (except secrets)
+- Documentation complete and tested
 
 ---
 
