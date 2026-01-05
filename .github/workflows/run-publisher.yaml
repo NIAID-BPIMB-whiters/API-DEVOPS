@@ -74,7 +74,7 @@ jobs:
           # Wait for workflow to start (max 30 seconds)
           echo "Waiting for test workflow to start..."
           for i in {1..30}; do
-            RUN_ID=$(gh run list --workflow=test-apis-ephemeral.yaml --limit 1 --json databaseId --jq '.[0].databaseId')
+            RUN_ID=$(gh run list --workflow=test-apis-ephemeral.yaml --repo ${{ github.repository }} --limit 1 --json databaseId --jq '.[0].databaseId')
             if [ -n "$RUN_ID" ]; then
               echo "Test workflow started with ID: $RUN_ID"
               break
@@ -85,7 +85,7 @@ jobs:
           # Wait for the workflow to complete (max 10 minutes)
           if [ -n "$RUN_ID" ]; then
             echo "Waiting for test workflow to complete..."
-            gh run watch $RUN_ID --exit-status
+            gh run watch $RUN_ID --repo ${{ github.repository }} --exit-status
           else
             echo "Error: Test workflow did not start"
             exit 1
@@ -135,7 +135,7 @@ jobs:
           # Wait for workflow to start (max 30 seconds)
           echo "Waiting for test workflow to start..."
           for i in {1..30}; do
-            RUN_ID=$(gh run list --workflow=test-apis-ephemeral.yaml --limit 1 --json databaseId --jq '.[0].databaseId')
+            RUN_ID=$(gh run list --workflow=test-apis-ephemeral.yaml --repo ${{ github.repository }} --limit 1 --json databaseId --jq '.[0].databaseId')
             if [ -n "$RUN_ID" ]; then
               echo "Test workflow started with ID: $RUN_ID"
               break
@@ -146,7 +146,7 @@ jobs:
           # Wait for the workflow to complete (max 10 minutes)
           if [ -n "$RUN_ID" ]; then
             echo "Waiting for test workflow to complete..."
-            gh run watch $RUN_ID --exit-status
+            gh run watch $RUN_ID --repo ${{ github.repository }} --exit-status
           else
             echo "Error: Test workflow did not start"
             exit 1
