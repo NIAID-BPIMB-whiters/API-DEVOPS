@@ -1085,12 +1085,16 @@ Add Azure Advisor checks to your CI/CD pipeline for continuous compliance monito
     ```
 
 **2. Enable Zone Redundancy for Storage Account**
-- [ ] **Configure Zone-Redundant Storage** (Resource: `niaidapimdevdr`)
+- [x] **Configure Zone-Redundant Storage** (Resource: `niaidapimdevdr` → `niaidapimdevdrzrs`) ✅ **COMPLETED**
   - **Issue**: Storage account not zone-redundant
   - **Risk**: Data loss if single availability zone fails
   - **Impact**: High Availability & Disaster Recovery
-  - **Action**: Migrate to ZRS or GZRS
-  - **Note**: Requires storage migration or recreation
+  - **Action**: Migrated to new ZRS storage account
+  - **Details**:
+    - Created: `niaidapimdevdrzrs` with Standard_ZRS SKU
+    - Migrated: 1 blob (apim-daids-connect-Backup.apimbackup, 610KB) using AzCopy
+    - Verified: No APIM dependencies (manual backup only)
+    - **Next**: Monitor 2-3 days, then delete `niaidapimdevdr`
 
 #### 🟡 Medium Priority (Security Hardening)
 

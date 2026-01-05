@@ -1,15 +1,27 @@
 # =============================================================================
-# DEV DEPLOYMENT CONFIGURATION
+# DEV ENVIRONMENT - PUBLISHER CONFIGURATION
 # =============================================================================
-# This configuration file is used by the publisher workflow to deploy 
-# extracted artifacts from DAIDS_DEV environment to DEV environment.
+# TARGET ENVIRONMENT: DEV (niaid-bpimb-apim-dev)
+# 
+# This file configures how the publisher deploys artifacts TO the DEV environment.
+# Repository artifacts are extracted FROM DAIDS_DEV and contain DAIDS_DEV resource
+# references. This configuration remaps those references to DEV resources.
 #
-# Pipeline: DAIDS_DEV (apim-daids-connect) → Repository → DEV (niaid-bpimb-apim-dev)
+# Pipeline: DAIDS_DEV (extract) → Repository → DEV (deploy using this config)
 # =============================================================================
 
-apimServiceName: niaid-bpimb-apim-dev  # DEV APIM Service
+apimServiceName: niaid-bpimb-apim-dev  # TARGET: DEV APIM Service
 namedValues:
 loggers:
+  # Remap logger references from source (DAIDS_DEV) to target (DEV)
+  # Repository contains: "apim-daids-connect-ai" (from DAIDS_DEV)
+  # Deploy as: "niaid-bpimb-apim-dev-ai" (in DEV)
+  - name: apim-daids-connect-ai
+    properties:
+      loggerType: applicationInsights
+      resourceId: /subscriptions/18fc6b8b-44fa-47d7-ae51-36766ac67165/resourceGroups/niaid-bpimb-apim-dev-rg/providers/Microsoft.Insights/components/niaid-bpimb-apim-dev-ai
+      credentials:
+        connectionString: "{{niaid-bpimb-apim-dev-ai-connection-string}}"
 diagnostics:
 backends:
 

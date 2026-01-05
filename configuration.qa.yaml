@@ -1,15 +1,27 @@
 # =============================================================================
-# QA DEPLOYMENT CONFIGURATION
+# QA ENVIRONMENT - PUBLISHER CONFIGURATION
 # =============================================================================
-# This configuration file is used by the publisher workflow to deploy 
-# extracted artifacts from DEV environment to QA environment.
+# TARGET ENVIRONMENT: QA (niaid-bpimb-apim-qa)
+# 
+# This file configures how the publisher deploys artifacts TO the QA environment.
+# Repository artifacts are extracted FROM DAIDS_DEV and contain DAIDS_DEV resource
+# references. This configuration remaps those references to QA resources.
 #
-# Pipeline: DAIDS_DEV (apim-daids-connect) → Repository → DEV → QA
+# Pipeline: DAIDS_DEV (extract) → Repository → DEV → QA (deploy using this config)
 # =============================================================================
 
-apimServiceName: niaid-bpimb-apim-qa  # QA APIM Service
+apimServiceName: niaid-bpimb-apim-qa  # TARGET: QA APIM Service
 namedValues:
 loggers:
+  # Remap logger references from source (DAIDS_DEV) to target (QA)
+  # Repository contains: "apim-daids-connect-ai" (from DAIDS_DEV)
+  # Deploy as: "niaid-bpimb-apim-qa-ai" (in QA)
+  - name: apim-daids-connect-ai
+    properties:
+      loggerType: applicationInsights
+      resourceId: /subscriptions/18fc6b8b-44fa-47d7-ae51-36766ac67165/resourceGroups/niaid-bpimb-apim-qa-rg/providers/Microsoft.Insights/components/niaid-bpimb-apim-qa-ai
+      credentials:
+        connectionString: "{{niaid-bpimb-apim-qa-ai-connection-string}}"
 diagnostics:
 backends:
 
