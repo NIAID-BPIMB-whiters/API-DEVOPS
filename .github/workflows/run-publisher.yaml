@@ -63,12 +63,33 @@ jobs:
     if: always() && (needs.Deploy-To-DEV-With-Commit-ID.result == 'success' || needs.Deploy-To-DEV-Without-Commit-ID.result == 'success')
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger API tests in DEV
+      - name: Trigger and wait for API tests in DEV
         run: |
+          # Trigger the test workflow
           gh workflow run test-apis-ephemeral.yaml \
             -f ENVIRONMENT=dev \
             -f TEST_TYPE=full-suite \
             --repo ${{ github.repository }}
+          
+          # Wait for workflow to start (max 30 seconds)
+          echo "Waiting for test workflow to start..."
+          for i in {1..30}; do
+            RUN_ID=$(gh run list --workflow=test-apis-ephemeral.yaml --limit 1 --json databaseId --jq '.[0].databaseId')
+            if [ -n "$RUN_ID" ]; then
+              echo "Test workflow started with ID: $RUN_ID"
+              break
+            fi
+            sleep 1
+          done
+          
+          # Wait for the workflow to complete (max 10 minutes)
+          if [ -n "$RUN_ID" ]; then
+            echo "Waiting for test workflow to complete..."
+            gh run watch $RUN_ID --exit-status
+          else
+            echo "Error: Test workflow did not start"
+            exit 1
+          fi
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -103,12 +124,33 @@ jobs:
     if: always() && (needs.Deploy-To-QA-With-Commit-ID.result == 'success' || needs.Deploy-To-QA-Without-Commit-ID.result == 'success')
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger API tests in QA
+      - name: Trigger and wait for API tests in QA
         run: |
+          # Trigger the test workflow
           gh workflow run test-apis-ephemeral.yaml \
             -f ENVIRONMENT=qa \
             -f TEST_TYPE=full-suite \
             --repo ${{ github.repository }}
+          
+          # Wait for workflow to start (max 30 seconds)
+          echo "Waiting for test workflow to start..."
+          for i in {1..30}; do
+            RUN_ID=$(gh run list --workflow=test-apis-ephemeral.yaml --limit 1 --json databaseId --jq '.[0].databaseId')
+            if [ -n "$RUN_ID" ]; then
+              echo "Test workflow started with ID: $RUN_ID"
+              break
+            fi
+            sleep 1
+          done
+          
+          # Wait for the workflow to complete (max 10 minutes)
+          if [ -n "$RUN_ID" ]; then
+            echo "Waiting for test workflow to complete..."
+            gh run watch $RUN_ID --exit-status
+          else
+            echo "Error: Test workflow did not start"
+            exit 1
+          fi
         env:
           GH_TOKEN: ${{ github.token }}
 
