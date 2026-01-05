@@ -9,9 +9,18 @@
 	<inbound>
 		<base />
 		<get-authorization-context provider-id="otds-xdev-cc" authorization-id="otds-xdev-cc" context-variable-name="auth-context" identity-type="managed" ignore-error="false" />
-		<set-header name="Authorization" exists-action="override">
-			<value>@("Bearer " + ((Authorization)context.Variables.GetValueOrDefault("auth-context"))?.AccessToken)</value>
-		</set-header>
+		<choose>
+			<when condition="@(context.Request.Headers.ContainsKey(&quot;OTCSTICKET&quot;))">
+				<set-header name="OTCSTICKET" exists-action="override">
+					<value>@(context.Request.Headers.GetValueOrDefault("OTCSTICKET"))</value>
+				</set-header>
+			</when>
+			<otherwise>
+				<set-header name="Authorization" exists-action="override">
+					<value>@("Bearer " + ((Authorization)context.Variables.GetValueOrDefault("auth-context"))?.AccessToken)</value>
+				</set-header>
+			</otherwise>
+		</choose>
 		<set-backend-service base-url="https://edrms-xdev.niaid.nih.gov" />
 	</inbound>
 	<!-- Control if and how the requests are forwarded to services  -->

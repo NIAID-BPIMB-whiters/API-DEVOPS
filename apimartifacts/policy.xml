@@ -14,6 +14,10 @@
 			<allowed-origins>
 				<origin>https://developer.apimdev.niaid.nih.gov</origin>
 				<origin>https://nih.sharepoint.com</origin>
+				<origin>https://ai-bpedrmsdev12.niaid.nih.gov</origin>
+				<origin>https://edrms-dev.niaid.nih.gov</origin>
+				<origin>https://ess-dev.niaid.nih.gov</origin>
+				<origin>https://edrms-xdev.niaid.nih.gov</origin>
 			</allowed-origins>
 			<allowed-methods preflight-result-max-age="300">
 				<method>*</method>
