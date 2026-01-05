@@ -55,7 +55,10 @@ API-DEVOPS/
 │   │   └── test-echo/
 │   ├── groups/                             # User groups
 │   ├── loggers/                            # Logger configurations
+│   │   ├── niaid-bpimb-apim-ai/           # Standardized logger (all environments)
+│   │   └── azuremonitor/                  # Azure Monitor logger
 │   ├── named values/                       # Configuration values and secrets
+│   │   └── apim-ai-connection-string/     # App Insights connection (environment-specific value)
 │   ├── products/                           # API product bundles
 │   │   ├── merlinws/
 │   │   ├── starter/
@@ -521,6 +524,95 @@ apis:
 
 ---
 
+### Cross-Environment Resource Mapping Strategy
+
+#### Problem: Environment-Specific Resource IDs
+
+When extracting APIM artifacts from one environment (e.g., DAIDS_DEV) for deployment to another (e.g., DEV, QA), certain resources contain **environment-specific resource IDs** that won't work across environments:
+
+- **Loggers** reference Application Insights via connection strings stored in **Named Values**
+- **Diagnostics** reference specific logger resource IDs
+- **Backends** may reference environment-specific services
+
+#### Solution: Standardized Resource Names
+
+Instead of relying on Azure APIops to remap resource IDs (which it doesn't support for all resource types), we use a **standardized naming convention** across all environments:
+
+**Logger Configuration:**
+- **Logger Name**: `niaid-bpimb-apim-ai` (identical across all environments)
+- **Named Value Name**: `apim-ai-connection-string` (identical across all environments)
+- **Named Value Content**: Environment-specific Application Insights connection string (secret)
+
+**How It Works:**
+
+```yaml
+# Repository artifacts reference standardized names
+Logger: niaid-bpimb-apim-ai
+  credentials:
+    connectionString: "{{apim-ai-connection-string}}"
+```
+
+Each environment has a **named value** called `apim-ai-connection-string`, but the **value** is different:
+
+| Environment | Named Value Name | Value (Connection String Points To) |
+|-------------|------------------|-------------------------------------|
+| **DAIDS_DEV** | `apim-ai-connection-string` | `apim-daids-connect-ai` App Insights |
+| **DEV** | `apim-ai-connection-string` | `niaid-bpimb-apim-dev-ai` App Insights |
+| **QA** | `apim-ai-connection-string` | `niaid-bpimb-apim-qa-ai` App Insights |
+
+**Benefits:**
+1. ✅ **No Manual Intervention**: Deployments work automatically across environments
+2. ✅ **Environment Isolation**: Each environment logs to its own Application Insights
+3. ✅ **GitOps Compatible**: Repository artifacts are environment-agnostic
+4. ✅ **APIops Compatible**: No unsupported configuration remapping required
+
+#### Why Not Use configuration.yaml Remapping?
+
+Azure APIops v6.0.2 has **limited support** for resource remapping in configuration files:
+
+- ✅ **Supported**: Backend URLs, named value overrides, API properties
+- ❌ **NOT Supported**: Logger resource ID remapping, diagnostic logger references
+
+The `configuration.dev.yaml` and `configuration.qa.yaml` files are used for **deployment-time overrides** (e.g., changing API diagnostic verbosity levels), but they **cannot remap logger references**.
+
+#### Infrastructure Details by Environment
+
+##### DAIDS_DEV (Source Environment - Temporary)
+- **APIM**: `apim-daids-connect` in `nih-niaid-avidpoc-dev-rg`
+- **App Insights**: `apim-daids-connect-ai`
+  - Instrumentation Key: `5df42b01-d64f-4b73-bb4d-ee61cb36e82d`
+  - Connection String: Stored in named value `apim-ai-connection-string`
+- **Logger**: `niaid-bpimb-apim-ai` → references `apim-ai-connection-string`
+- **Status**: Source for extractions; will be decommissioned after DEV is fully operational
+
+##### DEV (Primary Target Environment)
+- **APIM**: `niaid-bpimb-apim-dev` in `niaid-bpimb-apim-dev-rg`
+- **App Insights**: `niaid-bpimb-apim-dev-ai`
+  - Instrumentation Key: `77779b1a-63f2-4c18-a4da-1a9068bb6b13`
+  - Application ID: `8b7f93ca-8f81-416b-bcda-cdf0faca5ddb`
+  - Connection String: Stored in named value `apim-ai-connection-string`
+- **Logger**: `niaid-bpimb-apim-ai` → references `apim-ai-connection-string`
+- **Storage Account**: `niaidapimdevdrzrs` (Standard_ZRS for backup/DR)
+- **Status**: Active deployment target; will become extraction source after DAIDS_DEV retirement
+
+##### QA (Testing Environment)
+- **APIM**: `niaid-bpimb-apim-qa` in `niaid-bpimb-apim-qa-rg`
+- **App Insights**: `niaid-bpimb-apim-qa-ai`
+  - Instrumentation Key: `83e0e89e-f29a-4d13-8ebe-47ca09dcf7d7`
+  - Application ID: `b43ff4e0-fe96-4c73-b48a-31ff0c6dcff5`
+  - Connection String: Stored in named value `apim-ai-connection-string`
+- **Logger**: `niaid-bpimb-apim-ai` → references `apim-ai-connection-string`
+- **Status**: Configured for deployment; receives artifacts after DEV validation
+
+**Deployment Flow:**
+```
+DAIDS_DEV (extract) → Repository (standardized names) → DEV (deploy + test) → QA (deploy) → PROD (future)
+```
+
+**Key Principle**: The repository contains artifacts with **standardized resource names**. Each environment has resources with those exact names, but pointing to **environment-specific backing services** (App Insights, backends, etc.).
+
+---
+
 ## Development Workflow
 
 ### Standard GitOps Pipeline
@@ -861,25 +953,36 @@ gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in
 
 **Application Insights Monitoring (Priority: High)**
 
-- [x] **Migrate to Dedicated Application Insights** ✅ **COMPLETED** - December 26, 2025
-  - Created `apim-daids-connect-ai` in DEV (nih-niaid-avidpoc-dev-rg)
-  - Created `niaid-bpimb-apim-dev-ai` in PROD (niaid-bpimb-apim-dev-rg)
-  - Updated all diagnostics (global + API-specific) to use new loggers
-  - Removed dependency on POC Application Insights
-  - Impact: Proper resource ownership, improved monitoring infrastructure, eliminated POC dependencies
+- [x] **Implement Standardized Logging Infrastructure** ✅ **COMPLETED** - January 5, 2026
+  - Created dedicated Application Insights for each environment:
+    - `apim-daids-connect-ai` in DAIDS_DEV (nih-niaid-avidpoc-dev-rg)
+    - `niaid-bpimb-apim-dev-ai` in DEV (niaid-bpimb-apim-dev-rg)
+    - `niaid-bpimb-apim-qa-ai` in QA (niaid-bpimb-apim-qa-rg)
+  - Standardized logger name `niaid-bpimb-apim-ai` across all environments
+  - Standardized named value `apim-ai-connection-string` containing environment-specific connection strings
+  - Updated all diagnostics (global + API-specific) to use standardized logger
+  - Impact: Proper resource ownership, improved monitoring infrastructure, GitOps-compatible cross-environment deployments
+
+**APIM Logging and Diagnostics (Priority: High)**
+
+- [x] **Standardized Logger Configuration Across Environments** ✅ **COMPLETED** - January 5, 2026
+  - Created standardized logger `niaid-bpimb-apim-ai` in all environments (DAIDS_DEV, DEV, QA)
+  - Created standardized named value `apim-ai-connection-string` in all environments
+  - Each environment's named value contains connection string to its own Application Insights:
+    - DAIDS_DEV: `apim-daids-connect-ai` (Instrumentation Key: `5df42b01-d64f-4b73-bb4d-ee61cb36e82d`)
+    - DEV: `niaid-bpimb-apim-dev-ai` (Instrumentation Key: `77779b1a-63f2-4c18-a4da-1a9068bb6b13`)
+    - QA: `niaid-bpimb-apim-qa-ai` (Instrumentation Key: `83e0e89e-f29a-4d13-8ebe-47ca09dcf7d7`)
+  - ✅ Enables GitOps deployments across environments without manual resource ID remapping
+  - ✅ Repository artifacts reference standardized names, not environment-specific resource IDs
+  - ✅ Connection strings stored as inline secrets (marked secret in named values)
 
 **APIM Named Values Security (Priority: Medium)**
 
-- [x] **Move Secret Named Values to Key Vault** ✅ **NO LONGER NEEDED** - December 26, 2025
-  - ~~`niaid-azure-oaipoc-api-fa-key`~~ ✅ **REMOVED** (POC cleanup, December 26, 2025)
-  - ~~`6671ebaafb42680790aa5617`~~ ✅ **REMOVED** (POC logger replaced with dedicated App Insights)
+- [x] **Remove POC Named Values** ✅ **COMPLETED** - December 26, 2025
+  - ~~`niaid-azure-oaipoc-api-fa-key`~~ ✅ **REMOVED** (POC cleanup)
+  - ~~`6671ebaafb42680790aa5617`~~ ✅ **REMOVED** (POC logger replaced with standardized logger)
   - ~~`OTCSTICKET`~~ ✅ **REMOVED** (Deleted from DEV APIM)
-  
-  **Resolution**: Instead of migrating POC secrets to Key Vault, created dedicated Application Insights resources:
-  - ✅ DEV: `apim-daids-connect-ai` (using connection string in named value `694ed3c1b949c31f3c8ec979`)
-  - ✅ PROD: `niaid-bpimb-apim-dev-ai` (using connection string in named value `694ed3c1b949c31f3c8ec979`)
   - ✅ Eliminated dependency on POC Application Insights (`nih-niaid-bpimb-sebapi-poc-dev-eastus-rg`)
-  - ✅ No Key Vault migration required - connection strings stored as inline secrets
   
   **Migration Documentation**: ~~[NAMED-VALUES-KEYVAULT-MIGRATION.md](NAMED-VALUES-KEYVAULT-MIGRATION.md)~~ (obsolete)  
   **POC Cleanup**: See [POC-EXPORT-niaid-azure-oaipoc-api-fa.md](POC-EXPORT-niaid-azure-oaipoc-api-fa.md)
