@@ -1062,7 +1062,115 @@ Add Azure Advisor checks to your CI/CD pipeline for continuous compliance monito
 
 ---
 
-### 2. Configure QA Environment
+### 2. DAIDS_DEV Environment Compliance Remediation
+**Priority**: High  
+**Status**: 🔴 **Action Required** - January 5, 2026  
+**Resource Group**: `nih-niaid-avidpoc-dev-rg`  
+**Compliance Report**: Weekly reports generated via Azure Advisor workflow
+
+**Summary**: 14 recommendations identified (2 High, 10 Medium, 2 Low). 13 of 14 are security-related.
+
+#### 🔴 High Priority (Immediate Action Required)
+
+**1. Enforce HTTPS-Only on Demo Conference API**
+- [ ] **Enable HTTPS-Only Protocol** (Resource: `demo-conference-api`)
+  - **Issue**: API allows unencrypted HTTP traffic
+  - **Risk**: Data in transit not protected, credentials exposed
+  - **Impact**: Security - Man-in-the-middle attacks possible
+  - **Action**: Update API settings to enforce HTTPS-only
+  - **Implementation**:
+    ```bash
+    # Update apiInformation.json for demo-conference-api
+    "protocols": ["https"]  # Remove "http"
+    ```
+
+**2. Enable Zone Redundancy for Storage Account**
+- [ ] **Configure Zone-Redundant Storage** (Resource: `niaidapimdevdr`)
+  - **Issue**: Storage account not zone-redundant
+  - **Risk**: Data loss if single availability zone fails
+  - **Impact**: High Availability & Disaster Recovery
+  - **Action**: Migrate to ZRS or GZRS
+  - **Note**: Requires storage migration or recreation
+
+#### 🟡 Medium Priority (Security Hardening)
+
+**Infrastructure Security**
+
+- [ ] **Configure Key Vault Private Link** (Resource: `kv-niaid-apim-dev`)
+  - **Issue**: Key Vault accessible via public internet
+  - **Action**: Create private endpoint in DAIDS_DEV VNet
+  - **Reference**: Follow pattern from PROD implementation (completed Dec 24, 2025)
+
+- [ ] **Enable Key Vault Firewall** (Resource: `kv-niaid-apim-dev`)
+  - **Issue**: Public network access enabled
+  - **Action**: Disable public access, allow only private endpoint traffic
+  - **Note**: Implement after private link is configured
+
+- [ ] **Configure Storage Account Private Link** (Resource: `niaidapimdevdr`)
+  - **Issue**: Storage account accessible via public internet
+  - **Action**: Create private endpoint in DAIDS_DEV VNet
+
+- [ ] **Disable Shared Key Access on Storage** (Resource: `niaidapimdevdr`)
+  - **Issue**: Storage allows shared key authentication
+  - **Action**: Enable Azure AD-only authentication
+  - **Impact**: Requires updating all access patterns to use Azure AD
+
+- [ ] **Configure Storage VNet Rules** (Resource: `niaidapimdevdr`)
+  - **Issue**: No virtual network restrictions
+  - **Action**: Restrict access to specific VNets/subnets
+
+**API Management Security**
+
+- [ ] **Add Backend Authentication** (Resources: `webapp_nih-niaid-bpimb-mcp-opentext-wa`, `opentext-mcp-sop-policies-backend-d9b07a2f-8947-ecf4-f7c5-c85ad690a9ca`)
+  - **Issue**: Backend calls not authenticated
+  - **Action**: Configure managed identity or certificate-based authentication
+  - **Requirement**: Coordinate with backend service owners
+
+- [ ] **Migrate Secrets to Key Vault** (3 named values)
+  - `6671ebaafb42680790aa5617`
+  - `nihtrainingserviceaccount`
+  - `694ed3c1b949c31f3c8ec979`
+  - **Issue**: Secrets stored inline in APIM
+  - **Action**: Store in Key Vault, reference by Key Vault URL
+  - **Reference**: See completed migration in PROD environment
+
+#### 🟢 Low Priority (Best Practices)
+
+- [ ] **Enable Key Vault Diagnostic Logs** (Resource: `kv-niaid-apim-dev`)
+  - **Action**: Configure diagnostic settings to Log Analytics workspace
+  - **Reference**: Pattern from PROD (completed Dec 24, 2025)
+
+- [ ] **Configure Storage CMK Encryption** (Resource: `niaidapimdevdr`) - OPTIONAL
+  - **Note**: Only required if customer-managed keys needed for compliance
+
+#### Implementation Order (Recommended)
+
+**Phase 1 - Critical Security (Week 1)**
+1. Enforce HTTPS on demo-conference-api ⚠️ **BLOCKING**
+2. Enable zone redundancy for storage account
+
+**Phase 2 - Network Security (Week 2)**
+3. Configure Key Vault private link
+4. Enable Key Vault firewall
+5. Configure Storage private link
+
+**Phase 3 - Access Control (Week 3)**
+6. Migrate secrets to Key Vault
+7. Disable storage shared key access
+8. Configure storage VNet rules
+
+**Phase 4 - Backend Security (Week 4)**
+9. Coordinate backend authentication with service owners
+10. Enable Key Vault diagnostic logs
+
+**Compliance Monitoring**:
+- ✅ Automated weekly compliance checks via `.github/workflows/check-advisor.yaml`
+- ✅ Reports available as workflow artifacts
+- 📊 Current status tracked in workflow annotations
+
+---
+
+### 3. Configure QA Environment
 **Priority**: High  
 **Status**: ✅ **COMPLETED** - December 26, 2025
 
@@ -1086,7 +1194,7 @@ Add Azure Advisor checks to your CI/CD pipeline for continuous compliance monito
 
 ---
 
-### 3. Update Deployment Pipeline (DAIDS_DEV → DEV → QA)
+### 4. Update Deployment Pipeline (DAIDS_DEV → DEV → QA)
 **Priority**: High  
 **Status**: ✅ **COMPLETED** - December 26, 2025
 
@@ -1131,7 +1239,7 @@ DAIDS_DEV (apim-daids-connect) → Repository → DEV (niaid-bpimb-apim-dev) →
 
 ---
 
-### 4. Test Complete Deployment Pipeline
+### 5. Test Complete Deployment Pipeline
 **Priority**: High  
 **Status**: ⏳ Pending
 
@@ -1153,7 +1261,7 @@ DAIDS_DEV (apim-daids-connect) → Repository → DEV (niaid-bpimb-apim-dev) →
 
 ---
 
-### 5. Explore API Versioning Strategy
+### 6. Explore API Versioning Strategy
 **Priority**: Medium  
 **Status**: ⏳ Pending
 
@@ -1178,7 +1286,7 @@ DAIDS_DEV (apim-daids-connect) → Repository → DEV (niaid-bpimb-apim-dev) →
 
 ---
 
-### 6. Test DEV Environment Restoration
+### 7. Test DEV Environment Restoration
 **Priority**: Medium  
 **Status**: ⏳ Pending
 
