@@ -12,6 +12,13 @@
 
 apimServiceName: niaid-bpimb-apim-dev  # TARGET: DEV APIM Service
 namedValues:
+  # Remap Key Vault references from source (DAIDS_DEV) to target (DEV)
+  # Repository contains: kv-niaid-apim-dev (from DAIDS_DEV)
+  # Deploy using: kv-niaid-bpimb-apim-dev (in DEV)
+  - name: apim-ai-connection-string
+    properties:
+      keyVault:
+        secretIdentifier: https://kv-niaid-bpimb-apim-dev.vault.azure.net/secrets/apim-ai-connection-string
 loggers:
   # Remap logger references from source (DAIDS_DEV) to target (DEV)
   # Repository contains: "apim-daids-connect-ai" (from DAIDS_DEV)
