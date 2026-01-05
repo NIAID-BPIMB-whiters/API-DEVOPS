@@ -2,7 +2,7 @@
   "properties": {
     "loggerType": "applicationInsights",
     "credentials": {
-      "connectionString": "{{Logger-Credentials--694ed3c1b949c31f3c8ec97a}}"
+      "connectionString": "{{apim-ai-connection-string}}"
     },
     "description": "Application Insights logger for APIM",
     "isBuffered": true,
