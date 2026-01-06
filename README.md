@@ -260,6 +260,21 @@ Git Repository (apimartifacts/) → Publisher Tool → DEV APIM → Test DEV →
 - ✅ **Post-Deployment Testing**: Triggers full API test suite on DEV, gates QA deployment
 - ✅ **Logging**: Configurable log levels (Information, Debug, etc.)
 - ✅ **Test Gate**: QA deployment waits for DEV tests to pass
+- ✅ **Manual Approval**: Both DEV and QA deployments require approval from designated reviewers
+
+**Approval Workflow**:
+1. Workflow triggers (push to main or manual run)
+2. ⏸️  **Pauses before DEV deployment** - awaits approval
+3. Designated reviewer approves via GitHub Actions UI
+4. ✅ Deploys to DEV and runs tests
+5. ⏸️  **Pauses before QA deployment** - awaits approval (after DEV tests pass)
+6. Designated reviewer approves
+7. ✅ Deploys to QA and runs tests
+
+**Configure Approvers**:
+```
+GitHub → Settings → Environments → dev/qa → Required reviewers
+```
 
 **Usage**:
 ```bash
@@ -1395,26 +1410,35 @@ DAIDS_DEV (apim-daids-connect) → Repository → DEV (niaid-bpimb-apim-dev) →
 
 ### 6. Explore API Versioning Strategy
 **Priority**: Medium  
-**Status**: ⏳ Pending
+**Status**: ✅ **COMPLETED** - January 6, 2026
 
 **Objective**: Research and implement versioning approach for APIs during active development
 
-**Tasks**:
-- [ ] Research versioning approaches in Azure APIM
-  - URL path versioning (e.g., `/v1/api`, `/v2/api`)
+**Completed Tasks**:
+- [x] Research versioning approaches in Azure APIM
+  - URL path versioning (e.g., `/v1/api`, `/v2/api`) - **RECOMMENDED**
   - Header-based versioning
   - Query parameter versioning
-- [ ] Document semantic versioning practices
-- [ ] Define backwards compatibility requirements
-- [ ] Create guidelines for handling breaking changes during development
-- [ ] Establish version lifecycle management (deprecation, sunset policies)
-- [ ] Document recommended practices for the team
+- [x] Document semantic versioning practices
+- [x] Define backwards compatibility requirements
+- [x] Create guidelines for handling breaking changes during development
+- [x] Establish version lifecycle management (deprecation, sunset policies)
+- [x] Document recommended practices for the team
 
-**Considerations**:
-- Impact on existing APIs
-- Consumer communication strategy
-- Integration with CI/CD pipeline
-- Testing strategy for multiple versions
+**Deliverable**: See [API-VERSIONING-STRATEGY.md](API-VERSIONING-STRATEGY.md)
+
+**Key Recommendations**:
+- ✅ Use **URL path (Segment) versioning** as primary strategy
+- ✅ Use **Revisions** for non-breaking changes within a version
+- ✅ Follow **semantic versioning** (v1, v2, v3...)
+- ✅ Implement **6-month deprecation notice** minimum
+- ✅ Maintain **maximum 2 active versions** simultaneously
+
+**Next Steps**:
+1. Review strategy document with stakeholders
+2. Pilot with CRMS-API-QA (add version set)
+3. Plan v2 for APIs requiring breaking changes
+4. Implement automated contract testing
 
 ---
 
