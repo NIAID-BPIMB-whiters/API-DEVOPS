@@ -967,7 +967,169 @@ gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in
 
 ## TODO / Roadmap
 
-### 1. Azure Advisor Optimization
+### 1. Filter Non-Current API Versions on Extraction
+**Priority**: Medium  
+**Status**: ⏳ Pending  
+**Last Reviewed**: January 6, 2026
+
+**Objective**: Configure extractor to exclude non-current API versions from repository
+
+**Background**: 
+- APIs using version sets (e.g., Merlin API) may have multiple versions (v1, v2, legacy)
+- Only one version is marked as "current" (`isCurrent: true`)
+- Extractor currently captures ALL versions, including deprecated/legacy versions
+- This clutters the repository with versions that shouldn't be deployed
+
+**Solution Options**:
+
+**Option 1: Use Extraction Configuration File**
+```yaml
+# configuration.extractor.yaml
+apiFilters:
+  - name: "*"
+    apiVersionSetId: "*"
+    includeNonCurrent: false  # Only extract current versions
+```
+
+**Option 2: Post-Extraction Cleanup Script**
+```bash
+# In run-extractor.yaml, after extraction:
+# Remove non-current API versions
+find apimartifacts/apis -name "apiInformation.json" -exec grep -l '"isCurrent": false' {} \; | 
+  xargs -I {} dirname {} | 
+  xargs rm -rf
+```
+
+**Option 3: Manual Management**
+- Keep non-current versions in DAIDS_DEV only
+- Before extraction, manually delete non-current versions
+- Extract only cleaned-up state
+
+**Recommended**: Option 1 (if supported by APIops toolkit v6.0.2)
+
+**Tasks**:
+- [ ] Research APIops extractor configuration options
+- [ ] Test extraction with `includeNonCurrent: false` filter
+- [ ] Verify only current versions are extracted
+- [ ] Update extractor workflow if needed
+- [ ] Document version management in API-VERSIONING-STRATEGY.md
+
+**Impact**: Cleaner repository, only deployable versions committed, reduced noise in git history
+
+---
+
+### 2. Implement Rollback Function for Published Changes
+**Priority**: High  
+**Status**: ⏳ Pending  
+**Last Reviewed**: January 6, 2026
+
+**Objective**: Provide mechanism to rollback APIM deployments to previous known-good state
+
+**Background**:
+- Publisher deploys changes from repository to DEV/QA environments
+- No current mechanism to quickly revert problematic deployments
+- Manual rollback requires finding previous commit and re-running publisher
+- Need fast recovery path for production incidents
+
+**Solution Options**:
+
+**Option 1: Git-Based Rollback (Recommended)**
+```bash
+# Revert to specific commit
+git revert <bad-commit-sha>
+git push origin main
+# Publisher automatically deploys previous state
+
+# OR rollback to previous commit
+git reset --hard HEAD~1
+git push --force origin main
+```
+
+**Option 2: Rollback Workflow**
+```yaml
+# .github/workflows/rollback-deployment.yaml
+name: Rollback Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      ENVIRONMENT:
+        description: 'Environment to rollback'
+        required: true
+        type: choice
+        options:
+          - dev
+          - qa
+          - prod
+      COMMIT_SHA:
+        description: 'Git commit SHA to rollback to'
+        required: true
+        type: string
+      
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout specific commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.COMMIT_SHA }}
+      
+      - name: Deploy previous version
+        uses: ./.github/workflows/run-publisher-with-env.yaml
+        with:
+          API_MANAGEMENT_ENVIRONMENT: ${{ inputs.ENVIRONMENT }}
+          CONFIGURATION_YAML_PATH: configuration.${{ inputs.ENVIRONMENT }}.yaml
+```
+
+**Option 3: APIM Backup/Restore**
+```bash
+# Create backup before each deployment
+az apim backup --name niaid-bpimb-apim-dev \
+  --backup-name "backup-$(date +%Y%m%d-%H%M%S)" \
+  --storage-account niaidapimdevdrzrs
+
+# Restore on rollback
+az apim restore --name niaid-bpimb-apim-dev \
+  --backup-name "backup-20260106-120000" \
+  --storage-account niaidapimdevdrzrs
+```
+
+**Option 4: Tagged Releases**
+```bash
+# Tag stable deployments
+git tag -a v1.2.3 -m "Stable release after QA validation"
+git push origin v1.2.3
+
+# Rollback to tagged version
+git checkout v1.2.3
+gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in-repo"
+```
+
+**Recommended Approach**: Combination of Option 1 (git revert) + Option 4 (tags)
+- Tag successful deployments after validation
+- Use git revert for quick rollbacks
+- Maintain deployment history in git log
+
+**Tasks**:
+- [ ] Document rollback procedures in runbook
+- [ ] Create rollback workflow (optional, for ease of use)
+- [ ] Implement tagging strategy for stable releases
+- [ ] Test rollback in DEV environment
+- [ ] Add rollback testing to deployment checklist
+- [ ] Document recovery time objectives (RTO)
+
+**Success Criteria**:
+- Rollback completes within 5 minutes
+- Previous working state fully restored
+- No manual APIM configuration required
+- Deployment history preserved in git
+
+**Impact**: Faster incident recovery, reduced downtime, safer deployments
+
+---
+
+### 3. Azure Advisor Optimization
 **Priority**: Medium  
 **Status**: 🔄 In Progress  
 **Last Reviewed**: December 26, 2025
