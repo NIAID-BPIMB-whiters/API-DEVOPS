@@ -22,7 +22,17 @@ on:
           - "publish-all-artifacts-in-repo"
 
 jobs:
+  # Manual approval gate before DEV deployment
+  approve-dev-deployment:
+    runs-on: ubuntu-latest
+    environment: 
+      name: approve-dev  # Create this environment with required reviewers
+    steps:
+      - name: DEV deployment approved
+        run: echo "Proceeding with DEV deployment..."
+
   get-commit:
+    needs: approve-dev-deployment
     runs-on: ubuntu-latest
     steps:
       # Set the COMMIT_ID env variable
@@ -93,11 +103,22 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+  # Manual approval gate before QA deployment
+  approve-qa-deployment:
+    if: needs.Test-DEV-After-Deploy.result == 'success'
+    needs: Test-DEV-After-Deploy
+    runs-on: ubuntu-latest
+    environment:
+      name: approve-qa  # Create this environment with required reviewers
+    steps:
+      - name: QA deployment approved
+        run: echo "Proceeding with QA deployment..."
+
   #Deploy to QA with Commit ID (only changed artifacts from last commit)
   # Pipeline: DAIDS_DEV → Repository → DEV → QA
   Deploy-To-QA-With-Commit-ID:
-    if: (github.event_name == 'push' || github.event.inputs.COMMIT_ID_CHOICE == 'publish-artifacts-in-last-commit') && needs.Test-DEV-After-Deploy.result == 'success'
-    needs: [get-commit, Test-DEV-After-Deploy]
+    if: (github.event_name == 'push' || github.event.inputs.COMMIT_ID_CHOICE == 'publish-artifacts-in-last-commit' || !github.event.inputs.COMMIT_ID_CHOICE) && needs.approve-qa-deployment.result == 'success'
+    needs: [get-commit, approve-qa-deployment]
     uses: ./.github/workflows/run-publisher-with-env.yaml
     with:
       API_MANAGEMENT_ENVIRONMENT: qa # Deploys to QA APIM service (niaid-bpimb-apim-qa)
@@ -109,8 +130,8 @@ jobs:
   #Deploy to QA without Commit ID (all artifacts in repo)
   # Use this option for full redeployment of all artifacts to QA
   Deploy-To-QA-Without-Commit-ID:
-    if: (github.event.inputs.COMMIT_ID_CHOICE == 'publish-all-artifacts-in-repo') && needs.Test-DEV-After-Deploy.result == 'success'
-    needs: [get-commit, Test-DEV-After-Deploy]
+    if: (github.event.inputs.COMMIT_ID_CHOICE == 'publish-all-artifacts-in-repo') && needs.approve-qa-deployment.result == 'success'
+    needs: [get-commit, approve-qa-deployment]
     uses: ./.github/workflows/run-publisher-with-env.yaml
     with:
       API_MANAGEMENT_ENVIRONMENT: qa # Deploys to QA APIM service (niaid-bpimb-apim-qa)
