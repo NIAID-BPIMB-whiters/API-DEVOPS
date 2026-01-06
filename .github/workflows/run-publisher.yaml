@@ -117,7 +117,7 @@ jobs:
   #Deploy to QA with Commit ID (only changed artifacts from last commit)
   # Pipeline: DAIDS_DEV → Repository → DEV → QA
   Deploy-To-QA-With-Commit-ID:
-    if: (github.event_name == 'push' || github.event.inputs.COMMIT_ID_CHOICE == 'publish-artifacts-in-last-commit' || !github.event.inputs.COMMIT_ID_CHOICE) && needs.approve-qa-deployment.result == 'success'
+    if: (github.event_name == 'push' || github.event.inputs.COMMIT_ID_CHOICE == 'publish-artifacts-in-last-commit' || github.event.inputs.COMMIT_ID_CHOICE == '') && needs.approve-qa-deployment.result == 'success'
     needs: [get-commit, approve-qa-deployment]
     uses: ./.github/workflows/run-publisher-with-env.yaml
     with:
