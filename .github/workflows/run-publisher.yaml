@@ -105,7 +105,7 @@ jobs:
 
   # Manual approval gate before QA deployment
   approve-qa-deployment:
-    if: needs.Test-DEV-After-Deploy.result == 'success'
+    if: always() && needs.Test-DEV-After-Deploy.result == 'success'
     needs: Test-DEV-After-Deploy
     runs-on: ubuntu-latest
     environment:
