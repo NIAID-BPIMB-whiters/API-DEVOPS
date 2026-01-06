@@ -45,7 +45,7 @@ jobs:
   #Deploy to DEV with Commit ID (only changed artifacts from last commit)
   # Pipeline: DAIDS_DEV → Repository → DEV → QA
   Deploy-To-DEV-With-Commit-ID:
-    if: (github.event.inputs.COMMIT_ID_CHOICE == 'publish-artifacts-in-last-commit' || github.event.inputs.COMMIT_ID_CHOICE == '')
+    if: github.event_name == 'push' || github.event.inputs.COMMIT_ID_CHOICE == 'publish-artifacts-in-last-commit'
     needs: get-commit
     uses: ./.github/workflows/run-publisher-with-env.yaml
     with:
@@ -58,7 +58,7 @@ jobs:
   #Deploy to DEV without Commit ID (all artifacts in repo)
   # Use this option for full redeployment of all artifacts to DEV
   Deploy-To-DEV-Without-Commit-ID:
-    if: ( github.event.inputs.COMMIT_ID_CHOICE == 'publish-all-artifacts-in-repo' )
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.COMMIT_ID_CHOICE == 'publish-all-artifacts-in-repo'
     needs: get-commit
     uses: ./.github/workflows/run-publisher-with-env.yaml
     with:
@@ -117,11 +117,7 @@ jobs:
   #Deploy to QA with Commit ID (only changed artifacts from last commit)
   # Pipeline: DAIDS_DEV → Repository → DEV → QA
   Deploy-To-QA-With-Commit-ID:
-    if: |
-      (github.event_name == 'push' || 
-       (github.event_name == 'workflow_dispatch' && 
-        (github.event.inputs.COMMIT_ID_CHOICE == 'publish-artifacts-in-last-commit' || github.event.inputs.COMMIT_ID_CHOICE == ''))) 
-      && needs.approve-qa-deployment.result == 'success'
+    if: github.event_name == 'push' && needs.approve-qa-deployment.result == 'success'
     needs: [get-commit, approve-qa-deployment]
     uses: ./.github/workflows/run-publisher-with-env.yaml
     with:
@@ -134,7 +130,7 @@ jobs:
   #Deploy to QA without Commit ID (all artifacts in repo)
   # Use this option for full redeployment of all artifacts to QA
   Deploy-To-QA-Without-Commit-ID:
-    if: (github.event.inputs.COMMIT_ID_CHOICE == 'publish-all-artifacts-in-repo') && needs.approve-qa-deployment.result == 'success'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.COMMIT_ID_CHOICE == 'publish-all-artifacts-in-repo' && needs.approve-qa-deployment.result == 'success'
     needs: [get-commit, approve-qa-deployment]
     uses: ./.github/workflows/run-publisher-with-env.yaml
     with:
