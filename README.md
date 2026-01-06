@@ -2,17 +2,18 @@
 
 ## Overview
 
-This repository implements **GitOps for Azure API Management (APIM)** using Microsoft's [Azure APIops Toolkit](https://github.com/Azure/apiops). It automates the extraction, version control, and deployment of API Management artifacts across development and production environments.
+This repository implements **GitOps for Azure API Management (APIM)** using Microsoft's [Azure APIops Toolkit](https://github.com/Azure/apiops). It automates the extraction, version control, and deployment of API Management artifacts across DAIDS_DEV, DEV, and QA environments.
 
 ### Key Features
 
-- ✅ **Automated API Extraction** from development APIM to Git
-- ✅ **Automated Deployment** to production APIM via pull request merges
+- ✅ **Automated API Extraction** from DAIDS_DEV APIM to Git
+- ✅ **Automated Deployment** to DEV and QA APIM via push to main branch
 - ✅ **Version Control** for all APIM artifacts (APIs, policies, backends, products, etc.)
-- ✅ **Environment-Specific Configuration** with templating support
+- ✅ **Environment-Specific Configuration** with Key Vault integration and environment remapping
 - ✅ **Automated API Testing** using ephemeral Azure VMs for internal VNet testing
 - ✅ **API Linting** with Spectral for OpenAPI specification quality
 - ✅ **Internal VNet Support** for secure, private APIM instances
+- ✅ **Key Vault Integration** for centralized secret management with RBAC
 
 ---
 
@@ -70,7 +71,8 @@ API-DEVOPS/
 │   └── artifacts-from-portal/
 │
 ├── configuration.extractor.yaml            # Extraction configuration
-├── configuration.production.yaml           # Production deployment configuration
+├── configuration.dev.yaml                  # DEV deployment configuration
+├── configuration.qa.yaml                   # QA deployment configuration
 └── README.md                               # This file
 ```
 
@@ -175,7 +177,7 @@ Each API in `apimartifacts/apis/` contains:
 
 ### API Inventory
 
-Currently managing **7 APIs**:
+Currently managing **7 APIs** across all environments:
 
 | API Name | Purpose | Path |
 |----------|---------|------|
@@ -227,9 +229,9 @@ gh workflow run run-extractor.yaml -f CONFIGURATION_YAML_PATH="configuration.ext
 
 ---
 
-### 2. Publish to DEV (`run-publisher.yaml`)
+### 2. Publish to DEV and QA (`run-publisher.yaml`)
 
-**Purpose**: Deploy artifacts from repository to DEV APIM
+**Purpose**: Deploy artifacts from repository to DEV and QA APIM environments
 
 **Trigger**: 
 - Push to `main` branch (automatic)
@@ -237,7 +239,7 @@ gh workflow run run-extractor.yaml -f CONFIGURATION_YAML_PATH="configuration.ext
 
 **Pipeline Flow**:
 ```
-Git Repository (apimartifacts/) → Publisher Tool → DEV APIM (niaid-bpimb-apim-dev) → Automated Tests
+Git Repository (apimartifacts/) → Publisher Tool → DEV APIM → Test DEV → QA APIM → Test QA
 ```
 
 **Deployment Modes**:
@@ -254,9 +256,10 @@ Git Repository (apimartifacts/) → Publisher Tool → DEV APIM (niaid-bpimb-api
 
 **Features**:
 - ✅ **API Specification Linting**: Validates OpenAPI specs with Spectral
-- ✅ **Secret Substitution**: Replaces tokens in configuration files
-- ✅ **Post-Deployment Testing**: Triggers full API test suite on PROD
+- ✅ **Environment-Specific Configuration**: Remaps Key Vault URLs and resource references per environment
+- ✅ **Post-Deployment Testing**: Triggers full API test suite on DEV, gates QA deployment
 - ✅ **Logging**: Configurable log levels (Information, Debug, etc.)
+- ✅ **Test Gate**: QA deployment waits for DEV tests to pass
 
 **Usage**:
 ```bash
@@ -495,16 +498,25 @@ apis:
 
 ---
 
-### `configuration.production.yaml`
+### `configuration.dev.yaml` and `configuration.qa.yaml`
 
-Controls deployment to PRODUCTION APIM.
+Control deployments to DEV and QA APIM environments.
 
 ```yaml
-apimServiceName: niaid-bpimb-apim-dev  # PROD APIM instance
+apimServiceName: niaid-bpimb-apim-dev  # Target APIM instance
 
-# API-specific configuration overrides
+namedValues:
+  # Remap Key Vault references from source to target environment
+  - name: apim-ai-connection-string
+    properties:
+      keyVault:
+        secretIdentifier: https://kv-niaid-bpimb-apim-dev.vault.azure.net/secrets/apim-ai-connection-string
+
+loggers:
+  # Remap logger references (if needed)
+
 apis:
-  # Example:
+  # API-specific configuration overrides
   # - name: demo-conference-api
   #   diagnostics:
   #     - name: applicationinsights
@@ -513,9 +525,10 @@ apis:
 ```
 
 **Features**:
-- Environment-specific overrides
-- Diagnostic configuration
-- Secret token replacement using `{#TOKEN_NAME#}` syntax
+- Environment-specific Key Vault URL remapping
+- Logger and backend resource remapping
+- Diagnostic configuration overrides
+- Named value configuration
 
 **Important Notes**:
 - ⚠️ **SOAP/WSDL APIs NOT SUPPORTED** by Azure APIops v6.0.2
@@ -606,8 +619,10 @@ The `configuration.dev.yaml` and `configuration.qa.yaml` files are used for **de
 
 **Deployment Flow:**
 ```
-DAIDS_DEV (extract) → Repository (standardized names) → DEV (deploy + test) → QA (deploy) → PROD (future)
+DAIDS_DEV (extract) → Repository (standardized names) → DEV (deploy + test) → QA (deploy + test)
 ```
+
+**Note**: Production environment setup is planned for future implementation.
 
 **Key Principle**: The repository contains artifacts with **standardized resource names**. Each environment has resources with those exact names, but pointing to **environment-specific backing services** (App Insights, backends, etc.).
 
@@ -627,13 +642,13 @@ graph LR
 
 ### Step-by-Step Process
 
-#### 1. Make Changes in DEV APIM
-- Use Azure Portal to develop/test APIs in DEV environment
+#### 1. Make Changes in DAIDS_DEV APIM
+- Use Azure Portal to develop/test APIs in DAIDS_DEV environment
 - Configure policies, backends, products, etc.
 
 #### 2. Extract Artifacts
 ```bash
-# Extract changes from DEV to Git
+# Extract changes from DAIDS_DEV to Git
 gh workflow run run-extractor.yaml -f CONFIGURATION_YAML_PATH="configuration.extractor.yaml"
 
 # Wait for workflow to complete
@@ -643,9 +658,9 @@ gh run watch
 git pull origin main
 ```
 
-#### 3. Create Feature Branch
+#### 3. Create Feature Branch (Optional)
 ```bash
-# Create feature branch
+# Create feature branch for review
 git checkout -b feature/add-new-api
 
 # Review extracted changes
@@ -654,7 +669,7 @@ git diff
 
 # Commit to feature branch
 git add .
-git commit -m "Add new API from DEV environment"
+git commit -m "Add new API from DAIDS_DEV environment"
 git push origin feature/add-new-api
 ```
 
@@ -667,14 +682,16 @@ gh pr create --title "Add new API" --body "Extracted new API from DEV APIM"
 gh pr review --approve <PR_NUMBER>
 ```
 
-#### 5. Merge to Main (Auto-Deploy)
+#### 5. Merge to Main (Auto-Deploy to DEV and QA)
 ```bash
-# Merge PR
+# Merge PR (or push directly to main)
 gh pr merge <PR_NUMBER> --squash
 
 # Publisher workflow automatically triggers
-# Deploys to PROD APIM
-# Runs automated tests
+# 1. Deploys to DEV APIM
+# 2. Runs automated tests on DEV
+# 3. If tests pass, deploys to QA APIM
+# 4. Runs automated tests on QA
 ```
 
 #### 6. Verify Deployment
@@ -766,8 +783,9 @@ For service principals used in GitHub Actions workflows:
 
 | Environment | Network | Testing Method | Status |
 |-------------|---------|----------------|--------|
-| **Production** | Internal VNet | Ephemeral Azure VMs | ✅ Operational |
-| **Development** | Internal VNet | Ephemeral Azure VMs | ✅ Operational |
+| **DAIDS_DEV** | Internal VNet | Ephemeral Azure VMs | ✅ Operational |
+| **DEV** | Internal VNet | Ephemeral Azure VMs | ✅ Operational |
+| **QA** | Internal VNet | Ephemeral Azure VMs | ✅ Configured |
 
 ### Test Execution
 
@@ -787,16 +805,22 @@ For service principals used in GitHub Actions workflows:
 
 ### Latest Test Results
 
-**Production Environment (Post-VNet Migration - December 24, 2025)**:
+**DEV Environment (Post-VNet Migration - December 24, 2025)**:
 - ✅ Health Check: HTTP 404 (Gateway responding via private IP 10.179.0.4)
-- ✅ Full Suite: All 8 APIs accessible
+- ✅ Full Suite: All 7 APIs accessible
 - ✅ DNS Resolution: niaid-bpimb-apim-dev.azure-api.net → 10.179.0.4
+- ✅ Key Vault Integration: Named values successfully retrieving from kv-niaid-bpimb-apim-dev
 - Migration completed: December 23-24, 2025
 
-**Development Environment**:
-- ✅ All 8 APIs tested successfully using ephemeral VMs
+**DAIDS_DEV Environment**:
+- ✅ All 7 APIs tested successfully using ephemeral VMs
 - ✅ Private IP testing: 10.178.57.52
+- ✅ Key Vault Integration: Named values successfully retrieving from kv-niaid-apim-dev
 - ✅ DNS workaround: Using private IP with Host header
+
+**QA Environment**:
+- ✅ Key Vault Integration: Named values successfully retrieving from kv-niaid-bpimb-apim-qa
+- 🔄 Automated deployment pipeline in progress (test gate implementation)
 
 ### Service Principal Setup
 
@@ -830,12 +854,13 @@ For service principals used in GitHub Actions workflows:
 
 ### Version Control Best Practices
 
-- ✅ Always extract from DEV before making repository changes
-- ✅ Use feature branches for all changes
-- ✅ Require PR reviews before merging to main
-- ✅ Test in DEV APIM before extracting
-- ❌ Never manually edit PROD APIM (use GitOps)
-- ❌ Never commit secrets or sensitive data
+- ✅ Always extract from DAIDS_DEV before making repository changes
+- ✅ Use feature branches for code review (optional for simple changes)
+- ✅ Push to main triggers automatic deployment to DEV → QA
+- ✅ Test in DAIDS_DEV APIM before extracting
+- ✅ Key Vault secrets managed separately (not stored in repository)
+- ❌ Never manually edit DEV or QA APIM (use GitOps)
+- ❌ Never commit secrets or sensitive data to repository
 
 ---
 
@@ -853,7 +878,7 @@ az login --service-principal \
   --password $AZURE_CLIENT_SECRET \
   --tenant $AZURE_TENANT_ID
 
-# Test APIM access
+# Test APIM access to DAIDS_DEV
 az apim show --name apim-daids-connect --resource-group nih-niaid-avidpoc-dev-rg
 ```
 
@@ -863,7 +888,7 @@ az apim show --name apim-daids-connect --resource-group nih-niaid-avidpoc-dev-rg
 
 **Solution**:
 - Review OpenAPI specification errors in workflow logs
-- Fix specification in DEV APIM
+- Fix specification in DAIDS_DEV APIM
 - Re-extract and update repository
 
 **Issue**: Deployment fails with conflict error
