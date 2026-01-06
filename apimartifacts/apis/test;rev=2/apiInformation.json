@@ -1,0 +1,18 @@
+{
+  "properties": {
+    "path": "test",
+    "apiRevision": "2",
+    "apiRevisionDescription": "testing versions",
+    "authenticationSettings": {},
+    "displayName": "test",
+    "protocols": [
+      "https"
+    ],
+    "serviceUrl": "https://httpbin.org",
+    "subscriptionKeyParameterNames": {
+      "header": "Ocp-Apim-Subscription-Key",
+      "query": "subscription-key"
+    },
+    "subscriptionRequired": true
+  }
+}
