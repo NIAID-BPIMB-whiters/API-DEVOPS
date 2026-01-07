@@ -110,22 +110,14 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: approve-qa  # Create this environment with required reviewers
-    outputs:
-      should_deploy: ${{ steps.check.outputs.should_deploy }}
     steps:
-      - name: Check deployment conditions
-        id: check
-        run: |
-          echo "Event name: ${{ github.event_name }}"
-          echo "Approval result: success"
-          echo "should_deploy=true" >> $GITHUB_OUTPUT
       - name: QA deployment approved
         run: echo "Proceeding with QA deployment..."
 
   #Deploy to QA with Commit ID (only changed artifacts from last commit)
   # Pipeline: DAIDS_DEV → Repository → DEV → QA  
   Deploy-To-QA-With-Commit-ID:
-    if: always()
+    if: always() && needs.approve-qa-deployment.result == 'success' && (github.event_name == 'push' || github.event.inputs.COMMIT_ID_CHOICE == 'publish-artifacts-in-last-commit')
     needs: [get-commit, approve-qa-deployment]
     uses: ./.github/workflows/run-publisher-with-env.yaml
     with:
@@ -138,7 +130,7 @@ jobs:
   #Deploy to QA without Commit ID (all artifacts in repo)
   # Use this option for full redeployment of all artifacts to QA
   Deploy-To-QA-Without-Commit-ID:
-    if: needs.approve-qa-deployment.outputs.should_deploy == 'true' && github.event_name == 'workflow_dispatch' && github.event.inputs.COMMIT_ID_CHOICE == 'publish-all-artifacts-in-repo'
+    if: always() && needs.approve-qa-deployment.result == 'success' && github.event_name == 'workflow_dispatch' && github.event.inputs.COMMIT_ID_CHOICE == 'publish-all-artifacts-in-repo'
     needs: [get-commit, approve-qa-deployment]
     uses: ./.github/workflows/run-publisher-with-env.yaml
     with:
