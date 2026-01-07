@@ -123,9 +123,8 @@ jobs:
         run: echo "Proceeding with QA deployment..."
 
   #Deploy to QA with Commit ID (only changed artifacts from last commit)
-  # Pipeline: DAIDS_DEV → Repository → DEV → QA
+  # Pipeline: DAIDS_DEV → Repository → DEV → QA  
   Deploy-To-QA-With-Commit-ID:
-    if: needs.approve-qa-deployment.outputs.should_deploy == 'true'
     needs: [get-commit, approve-qa-deployment]
     uses: ./.github/workflows/run-publisher-with-env.yaml
     with:
