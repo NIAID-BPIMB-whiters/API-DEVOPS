@@ -125,6 +125,7 @@ jobs:
   #Deploy to QA with Commit ID (only changed artifacts from last commit)
   # Pipeline: DAIDS_DEV → Repository → DEV → QA  
   Deploy-To-QA-With-Commit-ID:
+    if: always()
     needs: [get-commit, approve-qa-deployment]
     uses: ./.github/workflows/run-publisher-with-env.yaml
     with:
