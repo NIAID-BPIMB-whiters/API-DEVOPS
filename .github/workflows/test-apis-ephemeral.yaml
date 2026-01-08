@@ -12,14 +12,14 @@ on:
   workflow_dispatch:
     inputs:
       ENVIRONMENT:
-        description: 'Environment to test (daids_dev or dev or qa)'
+        description: 'Environment to test (apim-daids-connect, apim-bpimb-dev, or apim-bpimb-qa)'
         required: true
         type: choice
         options:
-          - daids_dev
-          - dev
-          - qa
-        default: 'dev'
+          - apim-daids-connect
+          - apim-bpimb-dev
+          - apim-bpimb-qa
+        default: 'apim-bpimb-dev'
       TEST_TYPE:
         description: 'Type of test to run'
         required: true
@@ -66,18 +66,18 @@ jobs:
           VM_NAME="test-runner-$(date +%s)"
           
           # Determine resource group and VNet based on environment
-          if [ "${{ github.event.inputs.ENVIRONMENT }}" == "dev" ]; then
+          if [ "${{ github.event.inputs.ENVIRONMENT }}" == "apim-bpimb-dev" ]; then
             RG="nih-niaid-azurestrides-dev-rg-admin-az"
             VNET_RG="nih-niaid-azurestrides-dev-rg-admin-az"
             VNET="nih-niaid-azurestrides-bpimb-dev-apim-az"
             SUBNET="dev-commonservices"
-          elif [ "${{ github.event.inputs.ENVIRONMENT }}" == "qa" ]; then
+          elif [ "${{ github.event.inputs.ENVIRONMENT }}" == "apim-bpimb-qa" ]; then
             RG="nih-niaid-azurestrides-dev-rg-admin-az"
             VNET_RG="nih-niaid-azurestrides-dev-rg-admin-az"
             VNET="nih-niaid-azurestrides-bpimb-qa-apim-az"
             SUBNET="qa-commonservices"
           else
-            # daids_dev environment
+            # apim-daids-connect environment
             RG="nih-niaid-azurestrides-dev-rg-admin-az"
             VNET_RG="nih-niaid-azurestrides-dev-rg-admin-az"
             VNET="nih-niaid-azurestrides-dev-apim-az"
@@ -137,12 +137,16 @@ jobs:
         id: run-tests
         run: |
           # Determine APIM gateway based on environment
-          if [ "${{ github.event.inputs.ENVIRONMENT }}" == "prod" ]; then
-            # Use private IP for prod (internal VNet)
+          if [ "${{ github.event.inputs.ENVIRONMENT }}" == "apim-bpimb-dev" ]; then
+            # Use private IP for apim-bpimb-dev (internal VNet)
             APIM_GATEWAY="10.179.0.4"
             APIM_HOST="niaid-bpimb-apim-dev.azure-api.net"
+          elif [ "${{ github.event.inputs.ENVIRONMENT }}" == "apim-bpimb-qa" ]; then
+            # Use private IP for apim-bpimb-qa (internal VNet)
+            APIM_GATEWAY="10.180.0.4"
+            APIM_HOST="niaid-bpimb-apim-qa.azure-api.net"
           else
-            # Use private IP for dev (internal VNet - DNS not configured)
+            # Use private IP for apim-daids-connect (internal VNet - DNS not configured)
             APIM_GATEWAY="10.178.57.52"
             APIM_HOST="apim-daids-connect.azure-api.net"
           fi

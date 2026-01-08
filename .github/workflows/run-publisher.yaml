@@ -26,7 +26,7 @@ jobs:
   approve-dev-deployment:
     runs-on: ubuntu-latest
     environment: 
-      name: approve-dev  # Create this environment with required reviewers
+      name: approve-apim-bpimb-dev  # Create this environment with required reviewers
     steps:
       - name: DEV deployment approved
         run: echo "Proceeding with DEV deployment..."
@@ -49,7 +49,7 @@ jobs:
     needs: get-commit
     uses: ./.github/workflows/run-publisher-with-env.yaml
     with:
-      API_MANAGEMENT_ENVIRONMENT: dev # Deploys to DEV APIM service (niaid-bpimb-apim-dev)
+      API_MANAGEMENT_ENVIRONMENT: apim-bpimb-dev # Deploys to DEV APIM service (niaid-bpimb-apim-dev)
       COMMIT_ID: ${{ needs.get-commit.outputs.commit_id }}
       CONFIGURATION_YAML_PATH: configuration.dev.yaml # DEV deployment configuration
       API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts # Artifacts extracted from DAIDS_DEV environment
@@ -62,7 +62,7 @@ jobs:
     needs: get-commit
     uses: ./.github/workflows/run-publisher-with-env.yaml
     with:
-      API_MANAGEMENT_ENVIRONMENT: dev # Deploys to DEV APIM service (niaid-bpimb-apim-dev)
+      API_MANAGEMENT_ENVIRONMENT: apim-bpimb-dev # Deploys to DEV APIM service (niaid-bpimb-apim-dev)
       CONFIGURATION_YAML_PATH: configuration.dev.yaml # DEV deployment configuration
       API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts # All artifacts extracted from DAIDS_DEV environment
     secrets: inherit
@@ -109,7 +109,7 @@ jobs:
     needs: Test-DEV-After-Deploy
     runs-on: ubuntu-latest
     environment:
-      name: approve-qa  # Create this environment with required reviewers
+      name: approve-apim-bpimb-qa  # Create this environment with required reviewers
     steps:
       - name: QA deployment approved
         run: echo "Proceeding with QA deployment..."
@@ -121,7 +121,7 @@ jobs:
     needs: [get-commit, approve-qa-deployment]
     uses: ./.github/workflows/run-publisher-with-env.yaml
     with:
-      API_MANAGEMENT_ENVIRONMENT: qa # Deploys to QA APIM service (niaid-bpimb-apim-qa)
+      API_MANAGEMENT_ENVIRONMENT: apim-bpimb-qa # Deploys to QA APIM service (niaid-bpimb-apim-qa)
       COMMIT_ID: ${{ needs.get-commit.outputs.commit_id }}
       CONFIGURATION_YAML_PATH: configuration.qa.yaml # QA deployment configuration
       API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts # Artifacts extracted from DAIDS_DEV environment
@@ -134,7 +134,7 @@ jobs:
     needs: [get-commit, approve-qa-deployment]
     uses: ./.github/workflows/run-publisher-with-env.yaml
     with:
-      API_MANAGEMENT_ENVIRONMENT: qa # Deploys to QA APIM service (niaid-bpimb-apim-qa)
+      API_MANAGEMENT_ENVIRONMENT: apim-bpimb-qa # Deploys to QA APIM service (niaid-bpimb-apim-qa)
       CONFIGURATION_YAML_PATH: configuration.qa.yaml # QA deployment configuration
       API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts # All artifacts extracted from DAIDS_DEV environment
     secrets: inherit
