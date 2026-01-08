@@ -22,7 +22,6 @@ apis:
   - name: crms-api-qa
   - name: demo-conference-api
   - name: echo-api
-  - name: itpms-chat-api
   - name: merlin-db
   - name: opentext
   - name: otcs-mcp-server

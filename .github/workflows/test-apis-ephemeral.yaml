@@ -35,7 +35,7 @@ on:
         type: string
 
 env:
-  ALL_APIS: crms-api-qa,demo-conference-api,echo-api,itpms-chat-api,merlin-db,opentext,otcs-mcp-server,test
+  ALL_APIS: crms-api-qa,demo-conference-api,echo-api,merlin-db,opentext,otcs-mcp-server,test
 
 jobs:
   # =============================================================================
