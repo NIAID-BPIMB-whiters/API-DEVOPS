@@ -10,6 +10,34 @@
 # Pipeline: DAIDS_DEV (extract) → Repository → DEV → QA (deploy using this config)
 # =============================================================================
 
+# =============================================================================
+# CONFIGURATION CAPABILITIES
+# =============================================================================
+# WHAT THIS CONFIGURATION FILE CAN DO:
+# ✅ Remap APIM service name (apimServiceName)
+# ✅ Remap named value Key Vault references (namedValues.properties.keyVault)
+# ✅ Remap backend service URLs (backends.properties.url)
+# ✅ Override API properties (apis.properties.path, protocols, etc.)
+# ✅ Token substitution in artifacts using {{named-value-name}} syntax
+# ✅ Exclude specific artifacts from deployment (apis, products, etc.)
+# ✅ Override diagnostic verbosity levels (apis.diagnostics.properties.verbosity)
+#
+# WHAT THIS CONFIGURATION FILE CANNOT DO:
+# ❌ Remap logger resource IDs in diagnostic configurations
+#    Workaround: Use standardized logger names across all environments
+# ❌ Remap self-hosted gateway names
+#    Workaround: Use standardized gateway names or exclude from config
+# ❌ Remap product IDs in subscription references
+#    Workaround: Manually clean up subscriptions or use standardized product names
+# ❌ Modify API operation paths or methods
+#    Must be changed in OpenAPI specification files
+# ❌ Remap policy XML resource references dynamically
+#    Use named values for environment-specific values in policies instead
+#
+# APIops Version: v6.0.2
+# See: https://github.com/Azure/apiops for feature documentation
+# =============================================================================
+
 apimServiceName: niaid-bpimb-apim-qa  # TARGET: QA APIM Service
 namedValues:
   # Remap Key Vault references from source (DAIDS_DEV) to target (QA)
@@ -20,9 +48,12 @@ namedValues:
       keyVault:
         secretIdentifier: https://kv-niaid-bpimb-apim-qa.vault.azure.net/secrets/apim-ai-connection-string
 loggers:
-  # Remap logger references from source (DAIDS_DEV) to target (QA)
-  # Repository contains: "apim-daids-connect-ai" (from DAIDS_DEV)
-  # Deploy as: "niaid-bpimb-apim-qa-ai" (in QA)
+  # NOTE: APIops v6.0.2 does NOT support remapping logger resource IDs in diagnostics
+  # This configuration creates/updates the logger itself, but diagnostic configs
+  # that reference loggers by name will use the logger name from the repository.
+  # WORKAROUND: Repository uses standardized logger name "niaid-bpimb-apim-ai"
+  # across all environments, with environment-specific backing resources.
+  # See Cross-Environment Architecture section in README for details.
   - name: apim-daids-connect-ai
     properties:
       loggerType: applicationInsights
