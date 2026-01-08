@@ -261,23 +261,43 @@ jobs:
           
           echo "Deleting VM: $VM_NAME"
           
-          # Get NIC and disk names before deleting VM
-          NIC_ID=$(az vm show --resource-group "$RG" --name "$VM_NAME" --query "networkProfile.networkInterfaces[0].id" -o tsv 2>/dev/null || echo "")
+          # Get NIC and OS disk names before deleting VM
+          VM_INFO=$(az vm show --resource-group "$RG" --name "$VM_NAME" --query "{nicId:networkProfile.networkInterfaces[0].id, osDisk:storageProfile.osDisk.name}" -o json 2>/dev/null || echo "{}")
+          NIC_ID=$(echo "$VM_INFO" | jq -r '.nicId // ""')
+          OS_DISK_NAME=$(echo "$VM_INFO" | jq -r '.osDisk // ""')
+          
           if [ -n "$NIC_ID" ]; then
             NIC_NAME=$(basename "$NIC_ID")
             echo "Found NIC: $NIC_NAME"
           fi
           
-          # Delete VM with OS disk and data disks
-          echo "Deleting VM and associated disks..."
+          if [ -n "$OS_DISK_NAME" ]; then
+            echo "Found OS disk: $OS_DISK_NAME"
+          fi
+          
+          # Delete VM first
+          echo "Deleting VM..."
           az vm delete \
             --resource-group "$RG" \
             --name "$VM_NAME" \
             --yes \
-            --delete-os-disk true \
-            --delete-data-disks true
+            --no-wait
           
-          # Delete NIC after VM is fully deleted
+          # Wait a bit for VM deletion to propagate
+          echo "Waiting for VM deletion to complete..."
+          sleep 10
+          
+          # Delete OS disk
+          if [ -n "$OS_DISK_NAME" ]; then
+            echo "Deleting OS disk: $OS_DISK_NAME"
+            az disk delete \
+              --resource-group "$RG" \
+              --name "$OS_DISK_NAME" \
+              --yes \
+              --no-wait
+          fi
+          
+          # Delete NIC
           if [ -n "$NIC_NAME" ]; then
             echo "Deleting NIC: $NIC_NAME"
             az network nic delete \
@@ -286,4 +306,4 @@ jobs:
               --no-wait
           fi
           
-          echo "VM and NIC cleanup complete"
+          echo "Cleanup initiated for VM, disk, and NIC"
