@@ -717,6 +717,131 @@ DAIDS_DEV (extract) → Repository (standardized names) → DEV (deploy + test) 
 
 ---
 
+## Cross-Environment Architecture
+
+### Why Artifacts from DAIDS_DEV Deploy to DEV/QA
+
+This repository implements a **source-target** architecture:
+
+- **Source Environment (apim-daids-connect / DAIDS_DEV)**: Where API artifacts are extracted FROM
+- **Target Environments (apim-bpimb-dev / DEV, apim-bpimb-qa / QA)**: Where API artifacts are deployed TO
+
+```
+┌─────────────────────┐
+│ DAIDS_DEV (Source)  │  niaid-daids-connect-apim
+│ ┌─────────────────┐ │
+│ │ APIs            │ │──┐
+│ │ Policies        │ │  │ Extraction
+│ │ Backends        │ │  │ (run-extractor.yaml)
+│ │ Loggers         │ │  │
+│ └─────────────────┘ │  │
+└─────────────────────┘  │
+                         ▼
+            ┌────────────────────────┐
+            │ Git Repository         │
+            │ (apimartifacts/)       │
+            │ - Standardized Names   │
+            │ - Version Controlled   │
+            └────────────────────────┘
+                         │
+          ┌──────────────┴──────────────┐
+          ▼                             ▼
+┌─────────────────────┐       ┌─────────────────────┐
+│ DEV (Target)        │       │ QA (Target)         │
+│ niaid-bpimb-apim-dev│       │ niaid-bpimb-apim-qa │
+│ ┌─────────────────┐ │       │ ┌─────────────────┐ │
+│ │ Same artifacts  │ │       │ │ Same artifacts  │ │
+│ │ DEV configs     │ │       │ │ QA configs      │ │
+│ └─────────────────┘ │       │ └─────────────────┘ │
+└─────────────────────┘       └─────────────────────┘
+```
+
+**Why This Pattern?**
+- DAIDS_DEV is the **authoritative source** for API definitions and policies
+- DEV and QA are **isolated deployment targets** with their own infrastructure
+- Changes are tested in DEV before promoting to QA
+- Each target environment uses **environment-specific configurations** (Key Vault URLs, backend endpoints, etc.)
+
+### Standardized Resource Naming
+
+The most critical architectural decision: **resource names are standardized across all environments**.
+
+**Example - Application Insights Logger:**
+
+| Environment | Logger Name (in APIM) | Backing App Insights Resource |
+|-------------|----------------------|------------------------------|
+| DAIDS_DEV   | `niaid-bpimb-apim-ai` | `apim-daids-connect-ai` |
+| DEV         | `niaid-bpimb-apim-ai` | `niaid-bpimb-apim-dev-ai` |
+| QA          | `niaid-bpimb-apim-ai` | `niaid-bpimb-apim-qa-ai` |
+
+**Why Standardized Names?**
+- APIops v6.0.2 **cannot remap logger resource IDs** during deployment
+- Diagnostic configs reference loggers by name (not resource ID)
+- Using the **same logger name** across environments ensures diagnostics work without modification
+- Each environment's logger points to its **own App Insights instance** via named values
+
+**How It Works:**
+
+1. **Repository contains**: Logger named `niaid-bpimb-apim-ai` (from DAIDS_DEV extraction)
+2. **DEV deployment**: Creates/updates `niaid-bpimb-apim-ai` logger in DEV APIM
+3. **Logger configuration**: Uses named value `apim-ai-connection-string` for connection
+4. **Environment-specific config**: `configuration.dev.yaml` sets `apim-ai-connection-string` to DEV Key Vault secret
+5. **Result**: Same logger name, different backing service per environment
+
+**Configuration Example:**
+
+```yaml
+# configuration.dev.yaml
+namedValues:
+  - name: apim-ai-connection-string
+    properties:
+      displayName: apim-ai-connection-string
+      keyVault:
+        secretIdentifier: https://kv-niaid-bpimb-apim-dev.vault.azure.net/secrets/apim-ai-connection-string
+
+# configuration.qa.yaml  
+namedValues:
+  - name: apim-ai-connection-string
+    properties:
+      displayName: apim-ai-connection-string
+      keyVault:
+        secretIdentifier: https://kv-niaid-bpimb-apim-qa.vault.azure.net/secrets/apim-ai-connection-string
+```
+
+### What APIops Can and Cannot Do
+
+**✅ APIops CAN remap during deployment:**
+- Backend service URLs (via `serviceUrl` in configuration files)
+- Named value sources (via Key Vault `secretIdentifier`)
+- API Management service name (via `API_MANAGEMENT_SERVICE_NAME` secret)
+- Subscription scopes (via API path changes)
+
+**❌ APIops CANNOT remap during deployment:**
+- Logger resource IDs (requires standardized logger names)
+- Diagnostic logger references (tied to logger names)
+- Self-hosted gateway names (must match or be excluded)
+- Product IDs in subscription references (requires manual cleanup)
+
+**Solution Pattern:**
+- Use **standardized resource names** for resources APIops cannot remap
+- Use **named values** to inject environment-specific values (App Insights connection strings, backend URLs, etc.)
+- Use **configuration files** (`configuration.dev.yaml`, `configuration.qa.yaml`) to customize per environment
+- **Exclude** environment-specific resources that shouldn't be deployed (via configuration `exclude` sections)
+
+### Mental Model Summary
+
+Think of the repository as containing:
+1. **API definitions** (artifacts FROM source environment)
+2. **Configuration files** (settings FOR each target environment)
+
+When publisher runs:
+1. Takes artifacts from `apimartifacts/` (standardized names)
+2. Applies `configuration.dev.yaml` or `configuration.qa.yaml` (environment customization)
+3. Deploys to target APIM (creates/updates resources with standardized names)
+4. Resources fetch environment-specific values from Key Vault (via named values)
+
+---
+
 ## Development Workflow
 
 ### Standard GitOps Pipeline
