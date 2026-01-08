@@ -105,6 +105,12 @@ jobs:
 
   # Manual approval gate before QA deployment
   approve-qa-deployment:
+    # CRITICAL: always() is required here to run even if previous jobs were skipped
+    # DEV deployment has two mutually exclusive jobs (Deploy-To-DEV-With-Commit-ID OR Deploy-To-DEV-Without-Commit-ID)
+    # Without always(), this job would be skipped when one of the DEV deployment jobs is skipped
+    # The && needs.Test-DEV-After-Deploy.result == 'success' ensures we only approve if tests passed
+    # DO NOT REMOVE always() - it will break QA deployment
+    # See: https://docs.github.com/en/actions/learn-github-actions/expressions#always
     if: always() && needs.Test-DEV-After-Deploy.result == 'success'
     needs: Test-DEV-After-Deploy
     runs-on: ubuntu-latest
@@ -117,6 +123,11 @@ jobs:
   #Deploy to QA with Commit ID (only changed artifacts from last commit)
   # Pipeline: DAIDS_DEV → Repository → DEV → QA  
   Deploy-To-QA-With-Commit-ID:
+    # CRITICAL: always() is required because approve-qa-deployment uses always()
+    # When a job uses always(), all dependent jobs must also use always() to run
+    # Without always() here, this job would be skipped even after approval
+    # The && needs.approve-qa-deployment.result == 'success' ensures approval was successful
+    # DO NOT REMOVE always() - it will break QA deployment
     if: always() && needs.approve-qa-deployment.result == 'success' && (github.event_name == 'push' || github.event.inputs.COMMIT_ID_CHOICE == 'publish-artifacts-in-last-commit')
     needs: [get-commit, approve-qa-deployment]
     uses: ./.github/workflows/run-publisher-with-env.yaml
@@ -130,6 +141,11 @@ jobs:
   #Deploy to QA without Commit ID (all artifacts in repo)
   # Use this option for full redeployment of all artifacts to QA
   Deploy-To-QA-Without-Commit-ID:
+    # CRITICAL: always() is required because approve-qa-deployment uses always()
+    # When a job uses always(), all dependent jobs must also use always() to run
+    # Without always() here, this job would be skipped even after approval
+    # The && needs.approve-qa-deployment.result == 'success' ensures approval was successful
+    # DO NOT REMOVE always() - it will break QA deployment
     if: always() && needs.approve-qa-deployment.result == 'success' && github.event_name == 'workflow_dispatch' && github.event.inputs.COMMIT_ID_CHOICE == 'publish-all-artifacts-in-repo'
     needs: [get-commit, approve-qa-deployment]
     uses: ./.github/workflows/run-publisher-with-env.yaml
