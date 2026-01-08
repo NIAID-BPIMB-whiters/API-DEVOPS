@@ -77,7 +77,7 @@ jobs:
         run: |
           # Trigger the test workflow
           gh workflow run test-apis-ephemeral.yaml \
-            -f ENVIRONMENT=dev \
+            -f ENVIRONMENT=apim-bpimb-dev \
             -f TEST_TYPE=full-suite \
             --repo ${{ github.repository }}
           
@@ -149,7 +149,7 @@ jobs:
         run: |
           # Trigger the test workflow
           gh workflow run test-apis-ephemeral.yaml \
-            -f ENVIRONMENT=qa \
+            -f ENVIRONMENT=apim-bpimb-qa \
             -f TEST_TYPE=full-suite \
             --repo ${{ github.repository }}
           
