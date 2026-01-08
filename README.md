@@ -328,6 +328,93 @@ Git Repository (apimartifacts/) → Publisher Tool → DEV APIM → Test DEV →
    - Used for disaster recovery or after build failures
    - Select "publish-all-artifacts-in-repo" option
 
+### Deployment Modes Explained
+
+The publisher supports two deployment modes with different use cases and performance characteristics:
+
+#### Incremental Deployment (publish-artifacts-in-last-commit)
+
+**How It Works**:
+- Publisher uses `COMMIT_ID` parameter to identify changed files
+- Internally compares `HEAD` (current commit) with `HEAD~1` (previous commit)
+- Only artifacts modified in the last commit are sent to APIM
+- APIops processes changed files and updates corresponding APIM resources
+
+**Performance**:
+- ~30-50% faster than full deployment (depending on change size)
+- Example: Updating 1 API policy takes ~20 seconds vs ~45 seconds for full deployment
+- Network transfer reduced (only changed files uploaded)
+
+**When to Use**:
+- ✅ Normal deployments (default on push to main)
+- ✅ Single API updates or policy changes
+- ✅ Configuration-only changes (named values, backends)
+- ✅ When you know exactly what changed in your commit
+
+**Safety**:
+- Safe for most changes - Git tracks modifications accurately
+- APIops validates artifacts before applying changes
+- Post-deployment tests catch any issues
+
+**Example**:
+```bash
+# Automatic on push
+git commit -m "Update echo-api policy"
+git push origin main  # Triggers incremental deployment
+
+# Manual trigger
+gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-artifacts-in-last-commit"
+```
+
+#### Full Deployment (publish-all-artifacts-in-repo)
+
+**How It Works**:
+- Publisher processes ALL artifacts in `apimartifacts/` folder
+- No commit comparison - every file is sent to APIM
+- APIops updates all resources regardless of whether they changed
+- APIM performs diff and only applies actual changes
+
+**Performance**:
+- Slower (~45-60 seconds for typical repository)
+- Processes all APIs, policies, backends, products, named values, etc.
+- More network transfer and API calls to APIM
+
+**When to Use**:
+- ✅ Disaster recovery (rebuild APIM from repository)
+- ✅ After manual APIM changes need to be overwritten
+- ✅ Sync issues (APIM state doesn't match repository)
+- ✅ First deployment to new environment
+- ✅ After build/deployment failures (ensure complete state)
+- ✅ When unsure if incremental captured all changes
+
+**Use Cases**:
+```bash
+# Rebuild DEV environment after manual portal changes
+gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in-repo"
+
+# Fix sync issues
+git pull origin main
+gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in-repo"
+```
+
+#### Troubleshooting Deployment Modes
+
+| Issue | Likely Cause | Solution |
+|-------|-------------|----------|
+| API not updating after commit | Changed file not detected by Git | Run full deployment to force update |
+| "Resource not found" error | Incremental trying to update deleted resource | Run full deployment to sync state |
+| Deployment slower than expected | Running full mode unnecessarily | Use incremental for single-file changes |
+| APIM has manual changes | Changes made in portal, not in repository | Run full deployment to overwrite |
+| Policy changes not applying | Policy file not committed or Git diff issue | Verify commit, use full deployment |
+
+#### Best Practices
+
+1. **Default to Incremental**: Faster, less load on APIM, easier to review changes
+2. **Use Full for Recovery**: When APIM state is unknown or potentially corrupted
+3. **Test After Deployment**: Both modes trigger post-deployment tests automatically
+4. **Monitor First Run**: First deployment to new environment should use full mode
+5. **Document Manual Changes**: If you make manual APIM changes, document and use full deployment to sync
+
 **Features**:
 - ✅ **API Specification Linting**: Validates OpenAPI specs with Spectral
 - ✅ **Environment-Specific Configuration**: Remaps Key Vault URLs and resource references per environment
