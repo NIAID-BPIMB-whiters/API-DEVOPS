@@ -17,6 +17,27 @@ This repository implements **GitOps for Azure API Management (APIM)** using Micr
 
 ---
 
+## Environments
+
+This repository manages three APIM instances with five GitHub environments (three credential environments + two approval gates):
+
+| GitHub Environment | Purpose | APIM Service | Resource Group | Network |
+|-------------------|---------|--------------|----------------|---------|
+| **apim-daids-connect** | Extractor source | niaid-daids-connect-apim | nih-niaid-azurestrides-dev-rg-apim-az | Internal VNet |
+| **apim-bpimb-dev** | DEV deployment target | niaid-bpimb-apim-dev | nih-niaid-azurestrides-dev-rg-apim-az | Internal VNet |
+| **apim-bpimb-qa** | QA deployment target | niaid-bpimb-apim-qa | nih-niaid-azurestrides-dev-rg-apim-az | Internal VNet |
+| **approve-apim-bpimb-dev** | DEV approval gate | N/A - approval only | N/A | N/A |
+| **approve-apim-bpimb-qa** | QA approval gate | N/A - approval only | N/A | N/A |
+
+**Environment Secrets** (stored in GitHub environment settings):
+- **apim-daids-connect**: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME` (niaid-daids-connect-apim)
+- **apim-bpimb-dev**: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME` (niaid-bpimb-apim-dev), `APIM_SUBSCRIPTION_KEY`
+- **apim-bpimb-qa**: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME` (niaid-bpimb-apim-qa), `APIM_SUBSCRIPTION_KEY`
+
+**Approval Environments** are configured with required reviewers to gate deployments to DEV and QA.
+
+---
+
 ## Repository Structure
 
 ```
@@ -1058,9 +1079,8 @@ on:
         required: true
         type: choice
         options:
-          - dev
-          - qa
-          - prod
+          - apim-bpimb-dev
+          - apim-bpimb-qa
       COMMIT_SHA:
         description: 'Git commit SHA to rollback to'
         required: true
