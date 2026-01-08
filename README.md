@@ -38,6 +38,59 @@ This repository manages three APIM instances with five GitHub environments (thre
 
 ---
 
+## Quick Start
+
+### Deploy an API Change
+```bash
+# 1. Edit API artifacts in apimartifacts/
+git add apimartifacts/apis/your-api/
+git commit -m "feat: Update your-api specification"
+git push origin main
+
+# 2. GitHub Actions automatically deploys to DEV → QA (with approvals)
+# Monitor: https://github.com/NIAID-BPIMB-whiters/API-DEVOPS/actions
+```
+
+### Add a New API
+```bash
+# 1. Run extractor to pull latest from DAIDS_DEV APIM
+gh workflow run run-extractor.yaml
+
+# 2. New API appears in apimartifacts/apis/new-api/
+# 3. (Optional) Modify configuration.*.yaml to exclude from DEV/QA if needed
+# 4. Commit and push - publisher workflow deploys automatically
+```
+
+### Run Tests Manually
+```bash
+# Test APIs in DEV environment
+gh workflow run test-apis-ephemeral.yaml -f ENVIRONMENT=apim-bpimb-dev
+
+# Test specific API only
+gh workflow run test-apis-ephemeral.yaml -f ENVIRONMENT=apim-bpimb-dev -f APIS="echo-api"
+```
+
+### Trigger Extraction
+```bash
+# Pull latest APIM config from DAIDS_DEV
+gh workflow run run-extractor.yaml
+```
+
+### Rollback a Deployment
+```bash
+# Find the last good commit
+git log --oneline -10
+
+# Revert to previous state
+git revert <bad-commit-sha>
+git push origin main
+# Publisher automatically redeploys previous configuration
+```
+
+**Need more details?** See [Development Workflow](#development-workflow) and [Deployment Architecture](#deployment-architecture) sections below.
+
+---
+
 ## Repository Structure
 
 ```
