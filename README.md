@@ -1129,7 +1129,248 @@ gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in
 
 ---
 
-### 3. Azure Advisor Optimization
+### 3. Add Environment Naming Reference Table
+**Priority**: High  
+**Status**: ⏳ Pending  
+**Last Reviewed**: January 8, 2026
+
+**Objective**: Create clear mapping between GitHub environments, APIM services, and Azure resources
+
+**Background**:
+- GitHub environment names now align with APIM resource names (apim-daids-connect, apim-bpimb-dev, apim-bpimb-qa)
+- New team members need quick reference for which environment corresponds to which APIM instance
+- Documentation uses various naming conventions that could be confusing
+
+**Tasks**:
+- [ ] Add environment reference table at top of README (after Overview section)
+- [ ] Include: GitHub environment name, APIM service name, resource group, purpose, network details
+- [ ] Document approval environments (approve-apim-bpimb-dev, approve-apim-bpimb-qa)
+- [ ] Clarify which secrets belong to which environment
+
+**Impact**: Reduces onboarding time, eliminates environment confusion, clearer documentation
+
+---
+
+### 4. Add Quick Start Guide
+**Priority**: High  
+**Status**: ⏳ Pending  
+**Last Reviewed**: January 8, 2026
+
+**Objective**: Provide 5-minute quick start for common tasks without reading full documentation
+
+**Background**:
+- README is comprehensive (1666 lines) but lacks quick start
+- New team members need immediate answers for common tasks
+- Current structure requires reading multiple sections to understand basic workflows
+
+**Tasks**:
+- [ ] Add Quick Start section at top of README (before Repository Structure)
+- [ ] Include common scenarios:
+  - Deploy an API change
+  - Rollback a deployment
+  - Add a new API
+  - Run tests manually
+  - Trigger extraction
+- [ ] Keep examples concise (1-4 commands per scenario)
+- [ ] Link to detailed documentation for each scenario
+
+**Impact**: Faster onboarding, reduced support questions, improved developer experience
+
+---
+
+### 5. Document Cross-Environment Architecture
+**Priority**: High  
+**Status**: ⏳ Pending  
+**Last Reviewed**: January 8, 2026
+
+**Objective**: Explain standardized logger pattern and cross-environment deployment strategy
+
+**Background**:
+- Most complex architectural decision: standardized logger names across environments
+- Current explanation scattered across copilot-instructions.md and configuration file comments
+- Not clearly documented why repository contains DAIDS_DEV resources but deploys to DEV/QA
+- APIops v6.0.2 limitations (logger resource ID remapping) not prominently explained
+
+**Tasks**:
+- [ ] Add "Cross-Environment Architecture" section before "Development Workflow"
+- [ ] Explain source vs target mental model (artifacts FROM source, configs FOR target)
+- [ ] Document standardized naming pattern (same logger name, different backing services)
+- [ ] List what APIops CAN do vs CANNOT do (backend URLs ✅, logger remapping ❌)
+- [ ] Include example showing how named values enable environment-specific values
+- [ ] Add visual diagram of artifact flow: DAIDS_DEV → Repo → DEV/QA
+
+**Impact**: Prevents confusion about logger naming, clarifies GitOps architecture, reduces debugging time
+
+---
+
+### 6. Document Approval Architecture
+**Priority**: High  
+**Status**: ⏳ Pending  
+**Last Reviewed**: January 8, 2026
+
+**Objective**: Explain why separate approval and credential environments exist
+
+**Background**:
+- Deployment pipeline uses 4 environments for 2 deployment targets (approve-apim-bpimb-dev, apim-bpimb-dev, approve-apim-bpimb-qa, apim-bpimb-qa)
+- Architecture decision (separate approval from credentials) prevents multiple approval prompts
+- Not documented why this separation is necessary
+
+**Tasks**:
+- [ ] Add "Approval Architecture" section to README (in workflows documentation)
+- [ ] Create table showing: Environment name, Purpose, Contains (reviewers vs secrets)
+- [ ] Explain why jobs reference both environments (approval gate + Azure credentials)
+- [ ] Document how to configure approvers for each environment
+- [ ] Add troubleshooting section for approval issues
+
+**Impact**: Clearer workflow architecture, easier approval configuration, prevents misconfiguration
+
+---
+
+### 7. Remove itpms-chat-api from Extractor Config
+**Priority**: High  
+**Status**: ⏳ Pending  
+**Last Reviewed**: January 8, 2026
+
+**Objective**: Clean up extractor configuration to remove deleted API
+
+**Background**:
+- `itpms-chat-api` was removed on December 26, 2025 (POC cleanup)
+- Still listed in configuration.extractor.yaml line 24
+- Extractor will fail or skip this API, causing warnings
+
+**Tasks**:
+- [ ] Remove `itpms-chat-api` from configuration.extractor.yaml
+- [ ] Update ALL_APIS environment variable in test-apis-ephemeral.yaml
+- [ ] Test extraction to verify no warnings
+- [ ] Document removal in commit message
+
+**Impact**: Clean extractor runs, no warnings, accurate configuration
+
+---
+
+### 8. Add Workflow Comments Explaining always() Pattern
+**Priority**: Medium  
+**Status**: ⏳ Pending  
+**Last Reviewed**: January 8, 2026
+
+**Objective**: Document critical GitHub Actions workflow pattern in code
+
+**Background**:
+- QA deployment requires `if: always()` because approve-qa-deployment uses `always()`
+- This pattern is not intuitive - removing it breaks QA deployment
+- No comments in workflow file explaining why this is necessary
+- Future maintainers might remove it thinking it's unnecessary
+
+**Tasks**:
+- [ ] Add comments to run-publisher.yaml explaining `always()` pattern
+- [ ] Document in approve-qa-deployment job why it uses `always()`
+- [ ] Document in Deploy-To-QA-With-Commit-ID why it also needs `always()`
+- [ ] Add link to GitHub Actions documentation
+- [ ] Add warning about not removing this pattern
+
+**Impact**: Prevents accidental breakage, improves maintainability, documents workflow logic
+
+---
+
+### 9. Clarify Configuration File Capabilities
+**Priority**: Medium  
+**Status**: ⏳ Pending  
+**Last Reviewed**: January 8, 2026
+
+**Objective**: Document what configuration files CAN and CANNOT do
+
+**Background**:
+- configuration.dev.yaml and configuration.qa.yaml have comments saying they "remap logger references"
+- But APIops v6.0.2 doesn't actually support logger remapping - we work around it with standardized names
+- Misleading comments could cause confusion when trying to add new remapping rules
+
+**Tasks**:
+- [ ] Update configuration.dev.yaml header with clear CAPABILITIES section
+- [ ] List what CAN be done: API properties, backend URLs, named values, token substitution
+- [ ] List what CANNOT be done: Logger resource ID remapping, diagnostic references, API paths
+- [ ] Update configuration.qa.yaml with same documentation
+- [ ] Add examples of supported vs unsupported configuration
+
+**Impact**: Prevents wasted time trying unsupported features, clearer configuration expectations
+
+---
+
+### 10. Add Test Workflow Decision Guide
+**Priority**: Medium  
+**Status**: ⏳ Pending  
+**Last Reviewed**: January 8, 2026
+
+**Objective**: Help users choose between test-apis.yaml and test-apis-ephemeral.yaml
+
+**Background**:
+- Two test workflows exist but unclear when to use which
+- test-apis.yaml requires self-hosted runners (not configured)
+- test-apis-ephemeral.yaml is primary method but not clearly documented
+- All APIM instances are internal, so ephemeral is always the right choice currently
+
+**Tasks**:
+- [ ] Add "Testing Strategy" decision guide to README
+- [ ] Create "Which Test Workflow Should I Use?" section
+- [ ] Document: Use ephemeral for internal APIM (daids-connect, bpimb-dev, bpimb-qa)
+- [ ] Document: Use test-apis only for future public APIM endpoints
+- [ ] Clarify that test-apis currently NOT used in this project
+- [ ] Add examples of when each workflow is appropriate
+
+**Impact**: Eliminates testing confusion, clearer workflow selection, prevents mistakes
+
+---
+
+### 11. Explain Deployment Mode Differences
+**Priority**: Medium  
+**Status**: ⏳ Pending  
+**Last Reviewed**: January 8, 2026
+
+**Objective**: Document incremental vs full deployment modes
+
+**Background**:
+- Publisher workflow offers two modes: "publish-artifacts-in-last-commit" vs "publish-all-artifacts-in-repo"
+- README mentions this but doesn't explain HOW incremental mode works
+- Unclear when last-commit mode might miss something
+- No documentation of performance differences
+
+**Tasks**:
+- [ ] Add "Deployment Modes Explained" section to README
+- [ ] Document incremental mode: Uses git diff HEAD to HEAD~1, ~30% faster
+- [ ] Document full mode: Sends all files, used for disaster recovery
+- [ ] Add use cases for each mode
+- [ ] Document when incremental mode is safe vs when full mode is needed
+- [ ] Add troubleshooting section for sync issues
+
+**Impact**: Clearer deployment options, better decision making, faster deployments when safe
+
+---
+
+### 12. Create Visual Architecture Diagrams
+**Priority**: Low  
+**Status**: ⏳ Pending  
+**Last Reviewed**: January 8, 2026
+
+**Objective**: Add visual diagrams showing data flow and architecture
+
+**Background**:
+- Complex architecture better explained with diagrams
+- Text descriptions of artifact flow can be confusing
+- Environment relationships not visually represented
+- Deployment pipeline not diagrammed
+
+**Tasks**:
+- [ ] Create artifact flow diagram: DAIDS_DEV → Repository → DEV → QA
+- [ ] Create environment architecture diagram showing approval gates + credential environments
+- [ ] Create network diagram showing VNets, APIM instances, private IPs
+- [ ] Add logger standardization diagram showing name reuse pattern
+- [ ] Use mermaid syntax for maintainability in markdown
+- [ ] Place diagrams in relevant sections of README
+
+**Impact**: Faster comprehension, reduced learning curve, better onboarding
+
+---
+
+### 13. Azure Advisor Optimization
 **Priority**: Medium  
 **Status**: 🔄 In Progress  
 **Last Reviewed**: December 26, 2025
