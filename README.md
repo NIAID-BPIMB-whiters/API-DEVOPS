@@ -350,6 +350,76 @@ Git Repository (apimartifacts/) → Publisher Tool → DEV APIM → Test DEV →
 GitHub → Settings → Environments → dev/qa → Required reviewers
 ```
 
+### Approval Architecture
+
+The deployment workflow uses **two separate environments for each deployment target** to prevent multiple approval prompts:
+
+| Environment Name | Type | Purpose | Contains |
+|-----------------|------|---------|----------|
+| `approve-apim-bpimb-dev` | Approval Gate | Pause before DEV deployment | Required reviewers only |
+| `apim-bpimb-dev` | Credential Store | Azure authentication | Secrets (Client ID, Subscription, etc.) |
+| `approve-apim-bpimb-qa` | Approval Gate | Pause before QA deployment | Required reviewers only |
+| `apim-bpimb-qa` | Credential Store | Azure authentication | Secrets (Client ID, Subscription, etc.) |
+
+**Why Two Environments Per Target?**
+
+Without this separation, deployment jobs would need to reference the same environment twice:
+1. Once for approval (at job start)
+2. Once for secrets (inside reusable workflow)
+
+**Problem**: GitHub Actions only prompts for approval **once per environment per workflow run**. If a job references the same environment multiple times, the second reference gets skipped, causing the job to fail due to missing secrets.
+
+**Solution**: 
+- **Approval environments** (`approve-*`) contain only required reviewers, no secrets
+- **Credential environments** (`apim-*`) contain only secrets, no reviewers
+- Jobs reference approval environment first (triggers review), then call reusable workflow that uses credential environment (accesses secrets)
+
+**Example from run-publisher.yaml**:
+```yaml
+# Approval job - references approval environment
+approve-dev-deployment:
+  runs-on: ubuntu-latest
+  environment: 
+    name: approve-apim-bpimb-dev  # Contains reviewers, no secrets
+  steps:
+    - name: DEV deployment approved
+      run: echo "Proceeding with DEV deployment..."
+
+# Deployment job - references credential environment via reusable workflow
+Deploy-To-DEV-With-Commit-ID:
+  needs: approve-dev-deployment
+  uses: ./.github/workflows/run-publisher-with-env.yaml
+  with:
+    API_MANAGEMENT_ENVIRONMENT: apim-bpimb-dev # Contains secrets, no reviewers
+    CONFIGURATION_YAML_PATH: configuration.dev.yaml
+  secrets: inherit
+```
+
+**Configuration Steps**:
+
+1. **Create Approval Environments** (GitHub Settings → Environments):
+   - Create `approve-apim-bpimb-dev`
+   - Add required reviewers (e.g., team leads)
+   - ❌ Do NOT add any secrets
+
+2. **Create Credential Environments** (GitHub Settings → Environments):
+   - Create `apim-bpimb-dev`
+   - Add Azure secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME`, `APIM_SUBSCRIPTION_KEY`
+   - ❌ Do NOT add required reviewers
+
+3. **Repeat for QA**: Create `approve-apim-bpimb-qa` (reviewers only) and `apim-bpimb-qa` (secrets only)
+
+**Troubleshooting Approval Issues**:
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| Deployment skips approval | Approval environment missing required reviewers | Add reviewers to `approve-*` environment |
+| "Secret not found" error | Secrets in wrong environment | Move secrets to `apim-*` environment (not `approve-*`) |
+| Multiple approval prompts | Secrets in approval environment | Remove secrets from `approve-*`, add to `apim-*` only |
+| Approval doesn't pause workflow | Job doesn't reference approval environment | Check job has `environment: name: approve-*` |
+
+---
+
 **Usage**:
 ```bash
 # Automatic on push to main (incremental)
