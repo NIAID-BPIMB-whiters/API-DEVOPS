@@ -275,19 +275,16 @@ jobs:
             echo "Found OS disk: $OS_DISK_NAME"
           fi
           
-          # Delete VM first
+          # Delete VM and wait for completion
           echo "Deleting VM..."
           az vm delete \
             --resource-group "$RG" \
             --name "$VM_NAME" \
-            --yes \
-            --no-wait
+            --yes
           
-          # Wait a bit for VM deletion to propagate
-          echo "Waiting for VM deletion to complete..."
-          sleep 10
+          echo "VM deletion complete"
           
-          # Delete OS disk
+          # Delete OS disk after VM is fully deleted
           if [ -n "$OS_DISK_NAME" ]; then
             echo "Deleting OS disk: $OS_DISK_NAME"
             az disk delete \
