@@ -19,12 +19,6 @@ apimServiceName: apim-daids-connect  # DEV APIM Service Name
 
 apis:
   # Extract specific APIs by name
-  - name: crms-api-qa
-  - name: demo-conference-api
-  - name: echo-api
-  - name: merlin-db
-  - name: opentext
-  - name: otcs-mcp-server
   - name: test
   # Add more APIs as needed
 
