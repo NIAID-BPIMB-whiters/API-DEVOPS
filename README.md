@@ -36,6 +36,62 @@ This repository manages three APIM instances with five GitHub environments (thre
 
 **Approval Environments** are configured with required reviewers to gate deployments to DEV and QA.
 
+### Network Architecture
+
+All APIM instances are deployed in internal VNets with no public access:
+
+```mermaid
+graph TB
+    subgraph Azure["Azure Subscription: 18fc6b8b-44fa-47d7-ae51-36766ac67165"]
+        subgraph VNet["nih-niaid-azurestrides-dev-vnet-apim-az<br/>Internal VNet"]
+            subgraph Subnet1["APIM Subnet"]
+                DAIDS[niaid-daids-connect-apim<br/>Private IP: 10.x.x.x]
+                DEV_APIM[niaid-bpimb-apim-dev<br/>Private IP: 10.x.x.x]
+                QA_APIM[niaid-bpimb-apim-qa<br/>Private IP: 10.x.x.x]
+            end
+            
+            subgraph Subnet2["Common Services Subnet"]
+                TEST_VM[Ephemeral Test VMs<br/>Created on-demand<br/>Deleted after tests]
+            end
+        end
+        
+        subgraph Resources["Supporting Resources"]
+            DEV_AI[niaid-bpimb-apim-dev-ai<br/>Application Insights]
+            QA_AI[niaid-bpimb-apim-qa-ai<br/>Application Insights]
+            DEV_KV[kv-niaid-bpimb-apim-dev<br/>Key Vault]
+            QA_KV[kv-niaid-bpimb-apim-qa<br/>Key Vault]
+        end
+    end
+    
+    subgraph GitHub["GitHub Actions"]
+        EXTRACTOR[Extractor Workflow]
+        PUBLISHER[Publisher Workflow]
+        TESTS[Ephemeral Test Workflow]
+    end
+    
+    EXTRACTOR -->|Extract via Azure API| DAIDS
+    PUBLISHER -->|Deploy via Azure API| DEV_APIM
+    PUBLISHER -->|Deploy via Azure API| QA_APIM
+    TESTS -->|Create VM in VNet| TEST_VM
+    TEST_VM -->|Test via private IP| DEV_APIM
+    TEST_VM -->|Test via private IP| QA_APIM
+    DEV_APIM -->|Logging| DEV_AI
+    QA_APIM -->|Logging| QA_AI
+    DEV_APIM -->|Secrets| DEV_KV
+    QA_APIM -->|Secrets| QA_KV
+    
+    style DAIDS fill:#fff4e6
+    style DEV_APIM fill:#e6f7ff
+    style QA_APIM fill:#f0f5ff
+    style TEST_VM fill:#f6ffed
+```
+
+**Key Points**:
+- No public IPs - all APIM instances accessible only within Azure VNet
+- Ephemeral VMs created in same VNet for testing
+- GitHub Actions uses Azure CLI/APIs (public endpoints) for management
+- API testing requires VM inside VNet to reach private IPs
+
 ---
 
 ## Quick Start
@@ -424,6 +480,32 @@ gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in
 - ✅ **Manual Approval**: Both DEV and QA deployments require approval from designated reviewers
 
 **Approval Workflow**:
+
+```mermaid
+graph TD
+    START([Push to main or<br/>manual trigger]) --> APPROVE_DEV{Approval Gate<br/>approve-apim-bpimb-dev}
+    APPROVE_DEV --> |Reviewer approves| GET_COMMIT[Get Commit ID]
+    GET_COMMIT --> DEPLOY_DEV[Deploy to DEV<br/>uses: apim-bpimb-dev secrets]
+    DEPLOY_DEV --> TEST_DEV[Test DEV APIs<br/>ephemeral VM]
+    TEST_DEV --> |Tests pass| APPROVE_QA{Approval Gate<br/>approve-apim-bpimb-qa}
+    TEST_DEV --> |Tests fail| FAIL_DEV[❌ Stop Pipeline]
+    APPROVE_QA --> |Reviewer approves| DEPLOY_QA[Deploy to QA<br/>uses: apim-bpimb-qa secrets]
+    DEPLOY_QA --> TEST_QA[Test QA APIs<br/>ephemeral VM]
+    TEST_QA --> |Tests pass| SUCCESS[✅ Complete]
+    TEST_QA --> |Tests fail| FAIL_QA[❌ Stop Pipeline]
+    
+    style APPROVE_DEV fill:#fff7e6
+    style APPROVE_QA fill:#fff7e6
+    style DEPLOY_DEV fill:#e6f7ff
+    style DEPLOY_QA fill:#f0f5ff
+    style TEST_DEV fill:#f6ffed
+    style TEST_QA fill:#f6ffed
+    style SUCCESS fill:#d9f7be
+    style FAIL_DEV fill:#ffccc7
+    style FAIL_QA fill:#ffccc7
+```
+
+Steps:
 1. Workflow triggers (push to main or manual run)
 2. ⏸️  **Pauses before DEV deployment** - awaits approval
 3. Designated reviewer approves via GitHub Actions UI
@@ -883,34 +965,48 @@ This repository implements a **source-target** architecture:
 - **Source Environment (apim-daids-connect / DAIDS_DEV)**: Where API artifacts are extracted FROM
 - **Target Environments (apim-bpimb-dev / DEV, apim-bpimb-qa / QA)**: Where API artifacts are deployed TO
 
-```
-┌─────────────────────┐
-│ DAIDS_DEV (Source)  │  niaid-daids-connect-apim
-│ ┌─────────────────┐ │
-│ │ APIs            │ │──┐
-│ │ Policies        │ │  │ Extraction
-│ │ Backends        │ │  │ (run-extractor.yaml)
-│ │ Loggers         │ │  │
-│ └─────────────────┘ │  │
-└─────────────────────┘  │
-                         ▼
-            ┌────────────────────────┐
-            │ Git Repository         │
-            │ (apimartifacts/)       │
-            │ - Standardized Names   │
-            │ - Version Controlled   │
-            └────────────────────────┘
-                         │
-          ┌──────────────┴──────────────┐
-          ▼                             ▼
-┌─────────────────────┐       ┌─────────────────────┐
-│ DEV (Target)        │       │ QA (Target)         │
-│ niaid-bpimb-apim-dev│       │ niaid-bpimb-apim-qa │
-│ ┌─────────────────┐ │       │ ┌─────────────────┐ │
-│ │ Same artifacts  │ │       │ │ Same artifacts  │ │
-│ │ DEV configs     │ │       │ │ QA configs      │ │
-│ └─────────────────┘ │       │ └─────────────────┘ │
-└─────────────────────┘       └─────────────────────┘
+```mermaid
+graph TD
+    subgraph Source["Source Environment (DAIDS_DEV)"]
+        DAIDS[niaid-daids-connect-apim<br/>Internal VNet]
+        DAIDS_AI[apim-daids-connect-ai<br/>Application Insights]
+        DAIDS --> |logs to| DAIDS_AI
+    end
+    
+    subgraph Repo["Git Repository (API-DEVOPS)"]
+        direction TB
+        APIS[APIs<br/>Policies<br/>Backends]
+        CONFIG_DEV[configuration.dev.yaml<br/>DEV remapping]
+        CONFIG_QA[configuration.qa.yaml<br/>QA remapping]
+        ARTIFACTS[apimartifacts/<br/>Standardized Names]
+    end
+    
+    subgraph DEV["DEV Environment"]
+        DEV_APIM[niaid-bpimb-apim-dev<br/>Internal VNet]
+        DEV_AI[niaid-bpimb-apim-dev-ai<br/>Application Insights]
+        DEV_KV[kv-niaid-bpimb-apim-dev<br/>Key Vault]
+        DEV_APIM --> |logs to| DEV_AI
+        DEV_APIM --> |secrets from| DEV_KV
+    end
+    
+    subgraph QA["QA Environment"]
+        QA_APIM[niaid-bpimb-apim-qa<br/>Internal VNet]
+        QA_AI[niaid-bpimb-apim-qa-ai<br/>Application Insights]
+        QA_KV[kv-niaid-bpimb-apim-qa<br/>Key Vault]
+        QA_APIM --> |logs to| QA_AI
+        QA_APIM --> |secrets from| QA_KV
+    end
+    
+    DAIDS -->|Extractor<br/>run-extractor.yaml| ARTIFACTS
+    ARTIFACTS -->|Publisher + DEV config<br/>run-publisher.yaml| DEV_APIM
+    ARTIFACTS -->|Publisher + QA config<br/>run-publisher.yaml| QA_APIM
+    CONFIG_DEV -.->|remaps resources| DEV_APIM
+    CONFIG_QA -.->|remaps resources| QA_APIM
+    
+    style DAIDS fill:#fff4e6
+    style DEV_APIM fill:#e6f7ff
+    style QA_APIM fill:#f0f5ff
+    style ARTIFACTS fill:#f6ffed
 ```
 
 **Why This Pattern?**
@@ -930,6 +1026,40 @@ The most critical architectural decision: **resource names are standardized acro
 | DAIDS_DEV   | `niaid-bpimb-apim-ai` | `apim-daids-connect-ai` |
 | DEV         | `niaid-bpimb-apim-ai` | `niaid-bpimb-apim-dev-ai` |
 | QA          | `niaid-bpimb-apim-ai` | `niaid-bpimb-apim-qa-ai` |
+
+```mermaid
+graph LR
+    subgraph DAIDS_DEV["DAIDS_DEV Environment"]
+        DAIDS_LOGGER[Logger: niaid-bpimb-apim-ai]
+        DAIDS_NV[Named Value:<br/>apim-ai-connection-string]
+        DAIDS_APPINS[App Insights:<br/>apim-daids-connect-ai]
+        DAIDS_LOGGER --> |references| DAIDS_NV
+        DAIDS_NV --> |connection to| DAIDS_APPINS
+    end
+    
+    subgraph DEV["DEV Environment"]
+        DEV_LOGGER[Logger: niaid-bpimb-apim-ai<br/>SAME NAME]
+        DEV_NV[Named Value:<br/>apim-ai-connection-string<br/>SAME NAME]
+        DEV_APPINS[App Insights:<br/>niaid-bpimb-apim-dev-ai<br/>DIFFERENT RESOURCE]
+        DEV_LOGGER --> |references| DEV_NV
+        DEV_NV --> |connection to| DEV_APPINS
+    end
+    
+    subgraph QA["QA Environment"]
+        QA_LOGGER[Logger: niaid-bpimb-apim-ai<br/>SAME NAME]
+        QA_NV[Named Value:<br/>apim-ai-connection-string<br/>SAME NAME]
+        QA_APPINS[App Insights:<br/>niaid-bpimb-apim-qa-ai<br/>DIFFERENT RESOURCE]
+        QA_LOGGER --> |references| QA_NV
+        QA_NV --> |connection to| QA_APPINS
+    end
+    
+    style DAIDS_LOGGER fill:#fff4e6
+    style DEV_LOGGER fill:#e6f7ff
+    style QA_LOGGER fill:#f0f5ff
+    style DAIDS_NV fill:#fffbe6
+    style DEV_NV fill:#e6fffb
+    style QA_NV fill:#f9f0ff
+```
 
 **Why Standardized Names?**
 - APIops v6.0.2 **cannot remap logger resource IDs** during deployment
