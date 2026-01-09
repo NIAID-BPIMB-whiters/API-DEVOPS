@@ -1455,52 +1455,105 @@ gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in
 
 ### 1. Filter Non-Current API Versions on Extraction
 **Priority**: Medium  
-**Status**: ⏳ Pending  
-**Last Reviewed**: January 6, 2026
+**Status**: ⏳ Pending - **NOT SUPPORTED BY APIops v6.0.2**  
+**Last Reviewed**: January 9, 2026
 
 **Objective**: Configure extractor to exclude non-current API versions from repository
 
 **Background**: 
 - APIs using version sets (e.g., Merlin API) may have multiple versions (v1, v2, legacy)
-- Only one version is marked as "current" (`isCurrent: true`)
+- Only one version is marked as "current" (`isCurrent: true` in API DTO)
 - Extractor currently captures ALL versions, including deprecated/legacy versions
 - This clutters the repository with versions that shouldn't be deployed
 
-**Solution Options**:
+**Research Findings** (January 9, 2026):
 
-**Option 1: Use Extraction Configuration File**
+**APIops Toolkit Limitation**:
+- ❌ APIops v6.0.2 does **NOT** support filtering by `isCurrent` property
+- The extractor configuration only supports:
+  - `apiNames` - Filter by specific API names
+  - `versionSetNames` - Filter by version set names
+  - **NO** `includeNonCurrent`, `isCurrent`, or version-filtering options exist
+
+**How Extractor Handles API Versions**:
+```csharp
+// Source: https://github.com/Azure/apiops/blob/main/tools/code/extractor/Api.cs#L126-152
+// Extractor checks isCurrent ONLY for naming:
+var isCurrent = jsonObject.GetBoolProperty("isCurrent");
+// Current revision uses root name, non-current gets ;rev=X suffix
+return isCurrent ? name : ApiName.GetRevisionedName(rootName, revisionNumber);
+```
+
+**Available Workarounds**:
+
+**Option 1: Manual API Name List (CURRENT APPROACH)**
 ```yaml
 # configuration.extractor.yaml
-apiFilters:
-  - name: "*"
-    apiVersionSetId: "*"
-    includeNonCurrent: false  # Only extract current versions
+# Manually specify only current version API names
+apis:
+  - name: merlin-db        # Current version
+  # Do NOT include: merlin-db-v1, merlin-db-legacy, etc.
+  - name: opentext
+  - name: crms-api-qa
 ```
+- ✅ Simple, supported by current configuration
+- ❌ Requires manual maintenance when versions change
+- ❌ Must remember to update config when promoting new version
 
 **Option 2: Post-Extraction Cleanup Script**
-```bash
-# In run-extractor.yaml, after extraction:
-# Remove non-current API versions
-find apimartifacts/apis -name "apiInformation.json" -exec grep -l '"isCurrent": false' {} \; | 
-  xargs -I {} dirname {} | 
-  xargs rm -rf
+```yaml
+# In run-extractor.yaml, after extraction step:
+- name: Remove Non-Current API Versions
+  shell: pwsh
+  run: |
+    # Find and remove APIs where isCurrent is false
+    Get-ChildItem -Path "apimartifacts/apis" -Recurse -Filter "apiInformation.json" | 
+      Where-Object { 
+        $content = Get-Content $_.FullName -Raw | ConvertFrom-Json
+        $content.properties.isCurrent -eq $false 
+      } | 
+      ForEach-Object { 
+        Write-Host "Removing non-current API: $($_.Directory.Name)"
+        Remove-Item $_.Directory.FullName -Recurse -Force 
+      }
 ```
+- ✅ Automatic, no manual list maintenance
+- ✅ Always extracts current state
+- ⚠️ Adds complexity to workflow
+- ⚠️ Slight performance overhead
 
-**Option 3: Manual Management**
-- Keep non-current versions in DAIDS_DEV only
-- Before extraction, manually delete non-current versions
-- Extract only cleaned-up state
+**Option 3: Manual Pre-Extraction Cleanup in APIM**
+- Before running extractor, manually delete non-current versions from DAIDS_DEV
+- Extract only the cleaned-up state
+- ❌ Risk of accidentally deleting needed versions
+- ❌ Not GitOps-friendly (manual portal operations)
 
-**Recommended**: Option 1 (if supported by APIops toolkit v6.0.2)
+**Recommended Approach**: **Option 2 - Post-Extraction Cleanup Script**
 
-**Tasks**:
-- [ ] Research APIops extractor configuration options
-- [ ] Test extraction with `includeNonCurrent: false` filter
-- [ ] Verify only current versions are extracted
-- [ ] Update extractor workflow if needed
-- [ ] Document version management in API-VERSIONING-STRATEGY.md
+**Rationale**:
+1. Fully automated (no manual list maintenance)
+2. Always reflects current APIM state
+3. Low risk (only removes from extracted artifacts, not from APIM)
+4. Performance impact minimal (runs once per extraction)
+
+**Implementation Tasks**:
+- [ ] Add post-extraction cleanup step to run-extractor.yaml
+- [ ] Test cleanup script on dev-extracted folder
+- [ ] Verify only current versions remain after cleanup
+- [ ] Add logging to show which APIs were removed
+- [ ] Update API-VERSIONING-STRATEGY.md with this approach
+- [ ] Consider feature request to APIops project for native support
+
+**Future Enhancement**:
+Consider submitting feature request to Azure/apiops GitHub:
+- Add `includeNonCurrent: false` option to configuration.extractor.yaml
+- Similar to how `apiNames` and `versionSetNames` work today
 
 **Impact**: Cleaner repository, only deployable versions committed, reduced noise in git history
+
+**Related Links**:
+- APIops Extractor Source: https://github.com/Azure/apiops/blob/main/tools/code/extractor/Api.cs
+- Configuration Schema: https://github.com/Azure/apiops/blob/main/tools/code/extractor/Configuration.cs
 
 ---
 
