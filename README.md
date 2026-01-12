@@ -26,6 +26,8 @@
   - [6. VM Resource Cleanup Monitor](#6-vm-resource-cleanup-monitor-check-vm-cleanupyaml)
   - [7. Rollback Deployment](#7-rollback-deployment-rollback-deploymentyaml)
   - [8. Azure Advisor Compliance Check](#8-azure-advisor-compliance-check-check-advisoryaml)
+  - [9. Cleanup Orphaned APIs](#9-cleanup-orphaned-apis-cleanup-orphaned-apisyaml)
+  - [10. Check Orphaned Resources](#10-check-orphaned-resources-check-orphaned-resourcesyaml)
 - [Configuration Files](#configuration-files)
   - [configuration.extractor.yaml](#configurationextractoryaml)
   - [configuration.dev.yaml and configuration.qa.yaml](#configurationdevyaml-and-configurationqayaml)
@@ -565,6 +567,20 @@ gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in
 - ✅ **Test Gate**: QA deployment waits for DEV tests to pass
 - ✅ **Manual Approval**: Both DEV and QA deployments require approval from designated reviewers
 
+**Deployment Tagging**:
+
+Every successful deployment (after tests pass) is automatically tagged for rollback capability:
+- **Tag Format**: `deploy-{environment}-{timestamp}-{short-sha}`
+- **Example**: `deploy-dev-20260112-190042-4d53845`
+- **Created By**: Tag-DEV-Deployment and Tag-QA-Deployment jobs
+- **Metadata Includes**: Deployer name, workflow run ID, test status
+- **Purpose**: Enable quick rollback to known-good states
+
+Tags are created automatically as part of the publisher workflow sequence:
+```
+Deploy → Test → Tag (if tests pass) → Cleanup Orphaned APIs
+```
+
 **Approval Workflow**:
 
 ```mermaid
@@ -1068,6 +1084,237 @@ If the workflow returns 0 recommendations but you see recommendations in the Azu
 2. **Verify Environment Secrets**: Ensure the `prod` environment in GitHub has correct secrets configured
 
 3. **Check Azure Advisor Cache**: Recommendations may take 24-72 hours to appear after infrastructure changes
+
+---
+
+### 9. Cleanup Orphaned APIs (`cleanup-orphaned-apis.yaml`)
+
+**Purpose**: Identify and remove APIs that exist in APIM environments but not in the Git repository
+
+**Trigger**: 
+- Manual workflow dispatch only (standalone cleanup)
+- Automatically integrated into publisher workflow (after successful deployments and tests)
+
+**Problem Solved**:
+- Azure APIops publisher creates and updates APIs but **does NOT delete them**
+- APIs removed from repository remain in APIM environments
+- Manual cleanup required to maintain environment parity
+
+**Features**:
+- ✅ Compares repository APIs vs APIM APIs
+- ✅ Dry run mode for safe preview
+- ✅ Approval gates before deletion
+- ✅ Automatic cleanup of all API revisions
+- ✅ Detailed reporting of what will be/was deleted
+- ✅ Supports all environments (DEV, QA, DAIDS_DEV)
+
+**Automatic Integration**:
+
+The publisher workflow (`run-publisher.yaml`) now includes automatic cleanup jobs:
+- **Cleanup-DEV-Orphaned-APIs**: Runs after Tag-DEV-Deployment job succeeds
+- **Cleanup-QA-Orphaned-APIs**: Runs after Tag-QA-Deployment job succeeds
+
+**Workflow Sequence**:
+```
+Deploy → Test → Tag → **Cleanup Orphaned APIs** (new!)
+```
+
+This ensures APIM environments stay synchronized with the Git repository automatically.
+
+**How It Works**:
+
+```bash
+# 1. Get list of APIs in repository
+REPO_APIS=$(find apimartifacts/apis -maxdepth 1 -mindepth 1 -type d -exec basename {} \; | sort)
+
+# 2. Get list of current APIs in APIM
+APIM_APIS=$(az apim api list --query "[?isCurrent==\`true\`].name" -o tsv | sort)
+
+# 3. Find orphans (in APIM but not in repo)
+ORPHANED=$(comm -13 repo-apis.txt apim-apis.txt)
+
+# 4. Delete each orphaned API
+for api in $ORPHANED; do
+  az apim api delete --api-id "$api" --delete-revisions true --yes
+done
+```
+
+**Usage (Standalone)**:
+
+```bash
+# Preview what would be deleted (dry run)
+gh workflow run cleanup-orphaned-apis.yaml \
+  -f ENVIRONMENT=apim-bpimb-qa \
+  -f DRY_RUN=true
+
+# Execute cleanup after reviewing preview
+gh workflow run cleanup-orphaned-apis.yaml \
+  -f ENVIRONMENT=apim-bpimb-qa \
+  -f DRY_RUN=false \
+  -f INCLUDE_REVISIONS=true
+
+# Check cleanup status
+gh run list --workflow=cleanup-orphaned-apis.yaml --limit 3
+```
+
+**When to Use Standalone Workflow**:
+- Manual cleanup of DAIDS_DEV environment
+- One-time bulk cleanup after removing multiple APIs
+- Dry run testing before deployment
+- Cleanup after failed publisher runs
+
+**Automatic Cleanup Example**:
+
+When you delete an API from the repository:
+1. Delete API folder from `apimartifacts/apis/`
+2. Commit and push to main
+3. Publisher workflow deploys changes to DEV/QA
+4. Tests run and pass
+5. Deployment tagged (e.g., `deploy-dev-20260112-190042-4d53845`)
+6. **Cleanup job automatically deletes orphaned API from APIM** (new!)
+
+**Cleanup Report Includes**:
+- Count of orphaned APIs found
+- List of API names to be deleted
+- Revision cleanup status
+- Deletion results (success/failure)
+
+**Safety Features**:
+- ✅ Approval required before deletion
+- ✅ Dry run preview available
+- ✅ Only runs after successful deployment + tests
+- ✅ Detailed logging of all deletions
+- ✅ Cleanup skipped if no orphans found
+
+---
+
+### 10. Check Orphaned Resources (`check-orphaned-resources.yaml`)
+
+**Purpose**: Monitor for orphaned Azure resources (VMs, NICs, disks) left behind by failed test runs
+
+**Trigger**: 
+- Weekly schedule (Mondays at 9 AM UTC)
+- Manual workflow dispatch
+
+**Resources Monitored**:
+1. **Test Runner VMs**: VMs matching `test-runner-*` pattern
+2. **Network Interfaces**: Orphaned NICs from failed VM deletions
+3. **Unattached Disks**: Orphaned OS/data disks consuming storage
+
+**Resource Groups Checked**:
+- `nih-niaid-azurestrides-dev-rg-admin-az` (primary test resources)
+- `niaid-bpimb-apim-dev-rg` (DEV environment)
+- `niaid-bpimb-apim-qa-rg` (QA environment)
+
+**Features**:
+- ✅ Automated weekly scanning
+- ✅ Email notifications via workflow failure
+- ✅ Detailed cleanup reports with commands
+- ✅ Resource age tracking
+- ✅ Cost impact analysis
+- ✅ Ready-to-run cleanup scripts
+
+**Why This Matters**:
+- 💰 **Cost**: Orphaned VMs continue to incur charges ($0.02/hour per B1s VM)
+- 🌐 **IP Exhaustion**: Orphaned NICs consume subnet IP addresses (limited subnet space)
+- 🔒 **Security**: Unmanaged resources create security risks
+- 📊 **Compliance**: Clean environment required for audits
+
+**How It Works**:
+
+```bash
+# Check for orphaned VMs
+az vm list --resource-group <rg> --query "[?starts_with(name, 'test-runner')]"
+
+# Check for orphaned NICs (not attached to VM)
+az network nic list --resource-group <rg> --query "[?starts_with(name, 'test-runner') && virtualMachine == null]"
+
+# Check for orphaned disks
+az disk list --resource-group <rg> --query "[?starts_with(name, 'test-runner') && diskState == 'Unattached']"
+
+# Workflow FAILS if orphans found → triggers email notification
+```
+
+**Email Notification Setup**:
+
+1. **Enable GitHub Actions Notifications**:
+   - Go to [Settings → Notifications](https://github.com/settings/notifications)
+   - Enable **Actions** under "Actions" section
+   - Choose delivery method: Email, Web, or Mobile
+
+2. **Repository Watch Settings**:
+   - Visit this repository
+   - Click **Watch** → **Custom** → Enable **Actions**
+
+3. **Notification Triggers**:
+   - ⚠️ **Orphans Found**: Workflow fails, email sent with cleanup report
+   - ✅ **All Clear**: Workflow succeeds, no notification
+   - 📊 **Report**: Download detailed cleanup report from workflow artifacts
+
+**Usage**:
+
+```bash
+# Run manual check
+gh workflow run check-orphaned-resources.yaml
+
+# View latest results
+gh run list --workflow=check-orphaned-resources.yaml --limit 1
+gh run view <run-id>
+
+# Download cleanup report
+gh run download <run-id>  # Downloads orphaned-resources-report.md
+```
+
+**Cleanup Report Includes**:
+- Summary table (VMs, NICs, Disks counts)
+- Resource details (name, creation date, size/type)
+- Individual cleanup commands for each resource
+- Automated bulk cleanup script
+- Estimated cost impact
+
+**Manual Cleanup** (if needed):
+
+```bash
+# Delete all orphaned test VMs
+az vm list --resource-group nih-niaid-azurestrides-dev-rg-admin-az \
+  --query "[?starts_with(name, 'test-runner')].name" -o tsv | \
+  xargs -I {} az vm delete --resource-group nih-niaid-azurestrides-dev-rg-admin-az --name {} --yes
+
+# Delete all orphaned NICs
+az network nic list --resource-group nih-niaid-azurestrides-dev-rg-admin-az \
+  --query "[?starts_with(name, 'test-runner') && virtualMachine == null].name" -o tsv | \
+  xargs -I {} az network nic delete --resource-group nih-niaid-azurestrides-dev-rg-admin-az --name {}
+
+# Delete all orphaned disks
+az disk list --resource-group nih-niaid-azurestrides-dev-rg-admin-az \
+  --query "[?starts_with(name, 'test-runner') && diskState == 'Unattached'].name" -o tsv | \
+  xargs -I {} az disk delete --resource-group nih-niaid-azurestrides-dev-rg-admin-az --name {} --yes
+```
+
+**Troubleshooting**:
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| False positives during active testing | Workflow runs during test execution | Adjust schedule or check timing |
+| Cleanup jobs failing in test workflows | Missing `if: always()` on cleanup steps | Verify test-apis-ephemeral.yaml cleanup job |
+| Service principal permission errors | SP lacks delete permissions | Grant Contributor role on resource group |
+| No email notifications | GitHub notifications disabled | Enable Actions notifications in settings |
+
+**Prevention**:
+
+The ephemeral testing workflows include automatic cleanup:
+```yaml
+cleanup:
+  if: always()  # Runs even if tests fail
+  steps:
+    - name: Delete test VM, disk, and NIC
+      run: |
+        az vm delete --name $VM_NAME --yes
+        az disk delete --name $DISK_NAME --yes
+        az network nic delete --name $NIC_NAME
+```
+
+If cleanup still fails, this monitoring workflow detects and alerts within 7 days maximum.
 
 ---
 
@@ -1830,12 +2077,12 @@ Consider submitting feature request to Azure/apiops GitHub:
 
 ---
 
-### 2. Implement Rollback Function for Published Changes
+### 2. Implement Rollback Function and Cleanup Automation
 **Priority**: High  
-**Status**: ✅ **COMPLETED** - January 9, 2026
-**Last Reviewed**: January 9, 2026
+**Status**: ✅ **COMPLETED** - January 12, 2026
+**Last Reviewed**: January 12, 2026
 
-**Objective**: Provide mechanism to rollback APIM deployments to previous known-good state
+**Objective**: Provide mechanisms to rollback APIM deployments and automatically cleanup orphaned resources
 
 **Background**:
 - Publisher deploys changes from repository to DEV/QA environments
@@ -1925,11 +2172,15 @@ gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in
 **Completed Tasks**:
 - [x] Document rollback procedures in runbook
 - [x] Create rollback workflow (rollback-deployment.yaml)
-- [x] Implement automatic tagging strategy for stable releases
+- [x] Implement automatic tagging strategy for stable releases (Tag-DEV-Deployment, Tag-QA-Deployment jobs)
 - [x] Add dry-run capability for safe testing
 - [x] Document recovery time objectives (RTO)
 - [x] Add approval gates for QA rollbacks
 - [x] Integrate post-rollback verification tests
+- [x] Create orphaned API cleanup workflow (cleanup-orphaned-apis.yaml) - January 12, 2026
+- [x] Integrate automatic cleanup into publisher pipeline - January 12, 2026
+- [x] Create VM/NIC/disk cleanup monitor (check-orphaned-resources.yaml) - January 12, 2026
+- [x] Fixed conditional logic bugs in cleanup jobs (`if: always()`) - January 12, 2026
 
 **Implementation**:
 - ✅ Created `rollback-deployment.yaml` workflow with:
