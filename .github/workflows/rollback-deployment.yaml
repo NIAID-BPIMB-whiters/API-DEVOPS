@@ -40,6 +40,7 @@ jobs:
     outputs:
       target-sha: ${{ steps.validate.outputs.target_sha }}
       target-type: ${{ steps.validate.outputs.target_type }}
+      target-ref: ${{ steps.validate.outputs.target_ref }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -55,12 +56,16 @@ jobs:
           if git show-ref --tags "$TARGET" > /dev/null 2>&1; then
             echo "✅ Found tag: $TARGET"
             TARGET_SHA=$(git rev-list -n 1 "$TARGET")
+            TARGET_REF="$TARGET"
             echo "target_type=tag" >> $GITHUB_OUTPUT
+            echo "target_ref=$TARGET_REF" >> $GITHUB_OUTPUT
           # Check if target is a commit SHA
           elif git cat-file -e "$TARGET^{commit}" 2>/dev/null; then
             echo "✅ Found commit: $TARGET"
             TARGET_SHA="$TARGET"
+            TARGET_REF="$TARGET"
             echo "target_type=commit" >> $GITHUB_OUTPUT
+            echo "target_ref=$TARGET_REF" >> $GITHUB_OUTPUT
           else
             echo "❌ Error: '$TARGET' is not a valid tag or commit SHA"
             exit 1
@@ -199,11 +204,12 @@ jobs:
           echo "Deploying rollback using $CONFIG_FILE"
           echo "Environment: ${{ github.event.inputs.ENVIRONMENT }}"
           echo "Target SHA: ${{ needs.validate-target.outputs.target-sha }}"
+          echo "Target Ref: ${{ needs.validate-target.outputs.target-ref }}"
           
-          # Trigger publisher workflow manually
+          # Trigger publisher workflow using the tag ref (not the SHA)
           gh workflow run run-publisher.yaml \
             -f COMMIT_ID_CHOICE="publish-all-artifacts-in-repo" \
-            --ref ${{ needs.validate-target.outputs.target-sha }}
+            --ref ${{ needs.validate-target.outputs.target-ref }}
           
           echo "Rollback deployment triggered"
       
