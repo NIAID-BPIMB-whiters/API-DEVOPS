@@ -8,13 +8,6 @@
 	<!-- Throttle, authorize, validate, cache, or transform the requests -->
 	<inbound>
 		<base />
-		<!-- BREAKING CHANGE: Force all requests to fail with 500 error for rollback test -->
-		<return-response>
-			<set-status code="500" reason="Internal Server Error - Rollback Test" />
-			<set-body>@{
-				return "ERROR: This API has been intentionally broken for rollback testing. All requests will fail until rollback is executed.";
-			}</set-body>
-		</return-response>
 		<rate-limit-by-key calls="1000" renewal-period="60" counter-key="@(context.Subscription?.Key ?? "anonymous")" />
 	</inbound>
 	<!-- Control if and how the requests are forwarded to services  -->
