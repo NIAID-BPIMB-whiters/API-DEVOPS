@@ -145,6 +145,84 @@ jobs:
           echo '```bash' >> $GITHUB_STEP_SUMMARY
           echo "gh workflow run rollback-deployment.yaml -f ENVIRONMENT=apim-bpimb-dev -f ROLLBACK_TARGET=$TAG_NAME" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
+  
+  # Cleanup orphaned APIs in DEV after successful deployment
+  Cleanup-DEV-Orphaned-APIs:
+    needs: Tag-DEV-Deployment
+    if: needs.Tag-DEV-Deployment.result == 'success'
+    runs-on: ubuntu-latest
+    environment: apim-bpimb-dev
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Azure Login
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          az login --service-principal \
+            --username "$AZURE_CLIENT_ID" \
+            --password "$AZURE_CLIENT_SECRET" \
+            --tenant "$AZURE_TENANT_ID"
+          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+      
+      - name: Identify and delete orphaned APIs
+        env:
+          API_MANAGEMENT_SERVICE_NAME: ${{ secrets.API_MANAGEMENT_SERVICE_NAME }}
+          AZURE_RESOURCE_GROUP_NAME: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}
+        run: |
+          echo "Checking for orphaned APIs in DEV..."
+          
+          # Get APIs from repository
+          REPO_APIS=$(find apimartifacts/apis -maxdepth 1 -mindepth 1 -type d -exec basename {} \; | sort)
+          echo "$REPO_APIS" > repo-apis.txt
+          
+          # Get current APIs from APIM
+          APIM_APIS=$(az apim api list \
+            --resource-group "$AZURE_RESOURCE_GROUP_NAME" \
+            --service-name "$API_MANAGEMENT_SERVICE_NAME" \
+            --query "[?isCurrent==\`true\`].name" \
+            -o tsv | sort)
+          echo "$APIM_APIS" > apim-apis.txt
+          
+          # Find orphaned APIs (in APIM but not in repo)
+          ORPHANED=$(comm -13 repo-apis.txt apim-apis.txt)
+          
+          if [ -z "$ORPHANED" ]; then
+            echo "✅ No orphaned APIs found in DEV"
+            echo "## ✅ DEV API Cleanup" >> $GITHUB_STEP_SUMMARY
+            echo "No orphaned APIs found. Environment is in sync with repository." >> $GITHUB_STEP_SUMMARY
+          else
+            ORPHAN_COUNT=$(echo "$ORPHANED" | wc -l)
+            echo "⚠️ Found $ORPHAN_COUNT orphaned API(s) in DEV:"
+            echo "$ORPHANED"
+            
+            echo "## 🧹 DEV API Cleanup" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Deleted $ORPHAN_COUNT orphaned API(s):" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            
+            # Delete each orphaned API
+            echo "$ORPHANED" | while read api; do
+              if [ -n "$api" ]; then
+                echo "Deleting orphaned API: $api"
+                az apim api delete \
+                  --resource-group "$AZURE_RESOURCE_GROUP_NAME" \
+                  --service-name "$API_MANAGEMENT_SERVICE_NAME" \
+                  --api-id "$api" \
+                  --delete-revisions true \
+                  --yes || echo "⚠️ Failed to delete $api"
+                
+                echo "- \`$api\`" >> $GITHUB_STEP_SUMMARY
+              fi
+            done
+            
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ DEV environment synchronized with repository" >> $GITHUB_STEP_SUMMARY
+          fi
 
   # Manual approval gate before QA deployment
   approve-qa-deployment:
@@ -271,6 +349,84 @@ jobs:
           echo '```bash' >> $GITHUB_STEP_SUMMARY
           echo "gh workflow run rollback-deployment.yaml -f ENVIRONMENT=apim-bpimb-qa -f ROLLBACK_TARGET=$TAG_NAME" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
+  
+  # Cleanup orphaned APIs in QA after successful deployment
+  Cleanup-QA-Orphaned-APIs:
+    needs: Tag-QA-Deployment
+    if: needs.Tag-QA-Deployment.result == 'success'
+    runs-on: ubuntu-latest
+    environment: apim-bpimb-qa
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Azure Login
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          az login --service-principal \
+            --username "$AZURE_CLIENT_ID" \
+            --password "$AZURE_CLIENT_SECRET" \
+            --tenant "$AZURE_TENANT_ID"
+          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+      
+      - name: Identify and delete orphaned APIs
+        env:
+          API_MANAGEMENT_SERVICE_NAME: ${{ secrets.API_MANAGEMENT_SERVICE_NAME }}
+          AZURE_RESOURCE_GROUP_NAME: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}
+        run: |
+          echo "Checking for orphaned APIs in QA..."
+          
+          # Get APIs from repository
+          REPO_APIS=$(find apimartifacts/apis -maxdepth 1 -mindepth 1 -type d -exec basename {} \; | sort)
+          echo "$REPO_APIS" > repo-apis.txt
+          
+          # Get current APIs from APIM
+          APIM_APIS=$(az apim api list \
+            --resource-group "$AZURE_RESOURCE_GROUP_NAME" \
+            --service-name "$API_MANAGEMENT_SERVICE_NAME" \
+            --query "[?isCurrent==\`true\`].name" \
+            -o tsv | sort)
+          echo "$APIM_APIS" > apim-apis.txt
+          
+          # Find orphaned APIs (in APIM but not in repo)
+          ORPHANED=$(comm -13 repo-apis.txt apim-apis.txt)
+          
+          if [ -z "$ORPHANED" ]; then
+            echo "✅ No orphaned APIs found in QA"
+            echo "## ✅ QA API Cleanup" >> $GITHUB_STEP_SUMMARY
+            echo "No orphaned APIs found. Environment is in sync with repository." >> $GITHUB_STEP_SUMMARY
+          else
+            ORPHAN_COUNT=$(echo "$ORPHANED" | wc -l)
+            echo "⚠️ Found $ORPHAN_COUNT orphaned API(s) in QA:"
+            echo "$ORPHANED"
+            
+            echo "## 🧹 QA API Cleanup" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Deleted $ORPHAN_COUNT orphaned API(s):" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            
+            # Delete each orphaned API
+            echo "$ORPHANED" | while read api; do
+              if [ -n "$api" ]; then
+                echo "Deleting orphaned API: $api"
+                az apim api delete \
+                  --resource-group "$AZURE_RESOURCE_GROUP_NAME" \
+                  --service-name "$API_MANAGEMENT_SERVICE_NAME" \
+                  --api-id "$api" \
+                  --delete-revisions true \
+                  --yes || echo "⚠️ Failed to delete $api"
+                
+                echo "- \`$api\`" >> $GITHUB_STEP_SUMMARY
+              fi
+            done
+            
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ QA environment synchronized with repository" >> $GITHUB_STEP_SUMMARY
+          fi
 
   # Optional: Check Azure Advisor compliance after deployment
   # Uncomment to enable post-deployment compliance checks

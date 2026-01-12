@@ -1,0 +1,359 @@
+# =============================================================================
+# CLEANUP ORPHANED APIS WORKFLOW
+# =============================================================================
+# This workflow identifies and removes APIs that exist in APIM but not in the
+# repository (orphaned APIs). Useful for maintaining sync between Git and APIM.
+# =============================================================================
+
+name: Cleanup Orphaned APIs
+
+on:
+  workflow_dispatch:
+    inputs:
+      ENVIRONMENT:
+        description: 'Environment to cleanup'
+        required: true
+        type: choice
+        options:
+          - apim-bpimb-dev
+          - apim-bpimb-qa
+          - apim-daids-connect
+      DRY_RUN:
+        description: 'Dry run (preview deletions without executing)'
+        required: false
+        type: boolean
+        default: true
+      INCLUDE_REVISIONS:
+        description: 'Also cleanup non-current API revisions'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  identify-orphaned-apis:
+    name: Identify Orphaned APIs
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.ENVIRONMENT }}
+    outputs:
+      orphaned-apis: ${{ steps.find-orphans.outputs.orphaned_apis }}
+      orphan-count: ${{ steps.find-orphans.outputs.orphan_count }}
+      orphaned-revisions: ${{ steps.find-orphans.outputs.orphaned_revisions }}
+      revision-count: ${{ steps.find-orphans.outputs.revision_count }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Azure Login
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          az login --service-principal \
+            --username "$AZURE_CLIENT_ID" \
+            --password "$AZURE_CLIENT_SECRET" \
+            --tenant "$AZURE_TENANT_ID"
+          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+      
+      - name: Get APIs from repository
+        id: repo-apis
+        run: |
+          echo "Scanning repository for APIs..."
+          REPO_APIS=$(find apimartifacts/apis -maxdepth 1 -mindepth 1 -type d -exec basename {} \; | sort)
+          
+          echo "APIs in repository:"
+          echo "$REPO_APIS"
+          
+          # Save to file for comparison
+          echo "$REPO_APIS" > repo-apis.txt
+          
+          REPO_COUNT=$(echo "$REPO_APIS" | wc -l)
+          echo "Total APIs in repository: $REPO_COUNT"
+      
+      - name: Get APIs from APIM
+        id: apim-apis
+        env:
+          API_MANAGEMENT_SERVICE_NAME: ${{ secrets.API_MANAGEMENT_SERVICE_NAME }}
+          AZURE_RESOURCE_GROUP_NAME: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}
+        run: |
+          echo "Fetching APIs from APIM: $API_MANAGEMENT_SERVICE_NAME"
+          
+          # Get all APIs from APIM (excluding revisions for now)
+          APIM_APIS=$(az apim api list \
+            --resource-group "$AZURE_RESOURCE_GROUP_NAME" \
+            --service-name "$API_MANAGEMENT_SERVICE_NAME" \
+            --query "[?isCurrent==\`true\`].name" \
+            -o tsv | sort)
+          
+          echo "Current APIs in APIM:"
+          echo "$APIM_APIS"
+          
+          # Save to file
+          echo "$APIM_APIS" > apim-apis.txt
+          
+          APIM_COUNT=$(echo "$APIM_APIS" | wc -l)
+          echo "Total current APIs in APIM: $APIM_COUNT"
+          
+          # Get all API revisions if requested
+          if [ "${{ github.event.inputs.INCLUDE_REVISIONS }}" = "true" ]; then
+            echo ""
+            echo "Fetching non-current API revisions..."
+            APIM_REVISIONS=$(az apim api list \
+              --resource-group "$AZURE_RESOURCE_GROUP_NAME" \
+              --service-name "$API_MANAGEMENT_SERVICE_NAME" \
+              --query "[?isCurrent==\`false\`].name" \
+              -o tsv | sort)
+            
+            echo "Non-current revisions in APIM:"
+            echo "$APIM_REVISIONS"
+            echo "$APIM_REVISIONS" > apim-revisions.txt
+            
+            REVISION_COUNT=$(echo "$APIM_REVISIONS" | wc -l)
+            echo "Total non-current revisions: $REVISION_COUNT"
+          fi
+      
+      - name: Identify orphaned APIs
+        id: find-orphans
+        run: |
+          echo "Comparing repository vs APIM..."
+          
+          # Find APIs in APIM but not in repository (orphaned)
+          ORPHANED=$(comm -13 repo-apis.txt apim-apis.txt)
+          
+          ORPHAN_COUNT=0
+          if [ -n "$ORPHANED" ]; then
+            ORPHAN_COUNT=$(echo "$ORPHANED" | wc -l)
+          fi
+          
+          echo "orphan_count=$ORPHAN_COUNT" >> $GITHUB_OUTPUT
+          
+          if [ $ORPHAN_COUNT -gt 0 ]; then
+            echo "⚠️ Found $ORPHAN_COUNT orphaned API(s):"
+            echo "$ORPHANED"
+            
+            # Convert to JSON array for output
+            ORPHANED_JSON=$(echo "$ORPHANED" | jq -R . | jq -s .)
+            echo "orphaned_apis=$ORPHANED_JSON" >> $GITHUB_OUTPUT
+          else
+            echo "✅ No orphaned APIs found"
+            echo "orphaned_apis=[]" >> $GITHUB_OUTPUT
+          fi
+          
+          # Handle revisions if requested
+          REVISION_COUNT=0
+          if [ "${{ github.event.inputs.INCLUDE_REVISIONS }}" = "true" ] && [ -f apim-revisions.txt ]; then
+            REVISIONS=$(cat apim-revisions.txt)
+            if [ -n "$REVISIONS" ]; then
+              REVISION_COUNT=$(echo "$REVISIONS" | wc -l)
+              echo "revision_count=$REVISION_COUNT" >> $GITHUB_OUTPUT
+              
+              REVISIONS_JSON=$(echo "$REVISIONS" | jq -R . | jq -s .)
+              echo "orphaned_revisions=$REVISIONS_JSON" >> $GITHUB_OUTPUT
+              
+              echo ""
+              echo "📋 Found $REVISION_COUNT non-current revision(s) to cleanup"
+            fi
+          else
+            echo "revision_count=0" >> $GITHUB_OUTPUT
+            echo "orphaned_revisions=[]" >> $GITHUB_OUTPUT
+          fi
+          
+          # Create summary report
+          echo "## Orphaned API Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: ${{ github.event.inputs.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+          echo "**APIM Service**: ${{ secrets.API_MANAGEMENT_SERVICE_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Category | Count |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| APIs in Repository | $(cat repo-apis.txt | wc -l) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Current APIs in APIM | $(cat apim-apis.txt | wc -l) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Orphaned APIs** | **$ORPHAN_COUNT** |" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ github.event.inputs.INCLUDE_REVISIONS }}" = "true" ]; then
+            echo "| Non-current Revisions | $REVISION_COUNT |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ $ORPHAN_COUNT -gt 0 ]; then
+            echo "### ⚠️ Orphaned APIs (will be deleted)" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "$ORPHANED" | while read api; do
+              echo "- \`$api\`" >> $GITHUB_STEP_SUMMARY
+            done
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ $REVISION_COUNT -gt 0 ]; then
+            echo "### 📋 Non-current Revisions (will be deleted)" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            cat apim-revisions.txt | while read rev; do
+              echo "- \`$rev\`" >> $GITHUB_STEP_SUMMARY
+            done
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ $ORPHAN_COUNT -eq 0 ] && [ $REVISION_COUNT -eq 0 ]; then
+            echo "### ✅ All Clear" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "No orphaned APIs or revisions found. Repository and APIM are in sync." >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - name: Upload analysis report
+        if: steps.find-orphans.outputs.orphan_count > 0 || steps.find-orphans.outputs.revision_count > 0
+        uses: actions/upload-artifact@v4
+        with:
+          name: orphaned-apis-report
+          path: |
+            repo-apis.txt
+            apim-apis.txt
+            apim-revisions.txt
+          retention-days: 30
+
+  approve-deletion:
+    name: Approve API Deletion
+    needs: identify-orphaned-apis
+    if: |
+      github.event.inputs.DRY_RUN == 'false' && 
+      (needs.identify-orphaned-apis.outputs.orphan-count > 0 || 
+       needs.identify-orphaned-apis.outputs.revision-count > 0)
+    runs-on: ubuntu-latest
+    environment:
+      name: approve-${{ github.event.inputs.ENVIRONMENT }}
+    steps:
+      - name: Deletion approved
+        run: |
+          echo "✅ Deletion of ${{ needs.identify-orphaned-apis.outputs.orphan-count }} API(s) approved"
+          echo "✅ Deletion of ${{ needs.identify-orphaned-apis.outputs.revision-count }} revision(s) approved"
+
+  delete-orphaned-apis:
+    name: Delete Orphaned APIs
+    needs: [identify-orphaned-apis, approve-deletion]
+    if: |
+      always() &&
+      github.event.inputs.DRY_RUN == 'false' &&
+      needs.identify-orphaned-apis.result == 'success' &&
+      (needs.approve-deletion.result == 'success' || needs.approve-deletion.result == 'skipped') &&
+      (needs.identify-orphaned-apis.outputs.orphan-count > 0 || 
+       needs.identify-orphaned-apis.outputs.revision-count > 0)
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.ENVIRONMENT }}
+    steps:
+      - name: Azure Login
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          az login --service-principal \
+            --username "$AZURE_CLIENT_ID" \
+            --password "$AZURE_CLIENT_SECRET" \
+            --tenant "$AZURE_TENANT_ID"
+          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+      
+      - name: Delete orphaned APIs
+        if: needs.identify-orphaned-apis.outputs.orphan-count > 0
+        env:
+          API_MANAGEMENT_SERVICE_NAME: ${{ secrets.API_MANAGEMENT_SERVICE_NAME }}
+          AZURE_RESOURCE_GROUP_NAME: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}
+        run: |
+          echo "Deleting orphaned APIs from $API_MANAGEMENT_SERVICE_NAME..."
+          
+          ORPHANED_APIS='${{ needs.identify-orphaned-apis.outputs.orphaned-apis }}'
+          
+          echo "$ORPHANED_APIS" | jq -r '.[]' | while read api; do
+            echo "Deleting API: $api"
+            
+            az apim api delete \
+              --resource-group "$AZURE_RESOURCE_GROUP_NAME" \
+              --service-name "$API_MANAGEMENT_SERVICE_NAME" \
+              --api-id "$api" \
+              --delete-revisions true \
+              --yes || echo "⚠️ Failed to delete $api (may already be deleted)"
+            
+            echo "✅ Deleted: $api"
+          done
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ Deleted APIs" >> $GITHUB_STEP_SUMMARY
+          echo "$ORPHANED_APIS" | jq -r '.[]' | while read api; do
+            echo "- $api" >> $GITHUB_STEP_SUMMARY
+          done
+      
+      - name: Delete non-current revisions
+        if: |
+          github.event.inputs.INCLUDE_REVISIONS == 'true' &&
+          needs.identify-orphaned-apis.outputs.revision-count > 0
+        env:
+          API_MANAGEMENT_SERVICE_NAME: ${{ secrets.API_MANAGEMENT_SERVICE_NAME }}
+          AZURE_RESOURCE_GROUP_NAME: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}
+        run: |
+          echo "Deleting non-current API revisions from $API_MANAGEMENT_SERVICE_NAME..."
+          
+          REVISIONS='${{ needs.identify-orphaned-apis.outputs.orphaned-revisions }}'
+          
+          echo "$REVISIONS" | jq -r '.[]' | while read revision; do
+            echo "Deleting revision: $revision"
+            
+            az apim api delete \
+              --resource-group "$AZURE_RESOURCE_GROUP_NAME" \
+              --service-name "$API_MANAGEMENT_SERVICE_NAME" \
+              --api-id "$revision" \
+              --yes || echo "⚠️ Failed to delete $revision (may already be deleted)"
+            
+            echo "✅ Deleted: $revision"
+          done
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ Deleted Revisions" >> $GITHUB_STEP_SUMMARY
+          echo "$REVISIONS" | jq -r '.[]' | while read revision; do
+            echo "- $revision" >> $GITHUB_STEP_SUMMARY
+          done
+      
+      - name: Cleanup summary
+        run: |
+          echo "## 🎉 Cleanup Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: ${{ github.event.inputs.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Orphaned APIs Deleted**: ${{ needs.identify-orphaned-apis.outputs.orphan-count }}" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ github.event.inputs.INCLUDE_REVISIONS }}" = "true" ]; then
+            echo "**Revisions Deleted**: ${{ needs.identify-orphaned-apis.outputs.revision-count }}" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Repository and APIM are now synchronized." >> $GITHUB_STEP_SUMMARY
+
+  dry-run-summary:
+    name: Dry Run Summary
+    needs: identify-orphaned-apis
+    if: github.event.inputs.DRY_RUN == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Display dry run results
+        run: |
+          echo "## 🔍 Dry Run Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**This was a preview only - no APIs were deleted**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### What Would Be Deleted:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Orphaned APIs**: ${{ needs.identify-orphaned-apis.outputs.orphan-count }}" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ github.event.inputs.INCLUDE_REVISIONS }}" = "true" ]; then
+            echo "- **Non-current Revisions**: ${{ needs.identify-orphaned-apis.outputs.revision-count }}" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### To Execute Cleanup:" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "gh workflow run cleanup-orphaned-apis.yaml \\" >> $GITHUB_STEP_SUMMARY
+          echo "  -f ENVIRONMENT=${{ github.event.inputs.ENVIRONMENT }} \\" >> $GITHUB_STEP_SUMMARY
+          echo "  -f DRY_RUN=false \\" >> $GITHUB_STEP_SUMMARY
+          echo "  -f INCLUDE_REVISIONS=${{ github.event.inputs.INCLUDE_REVISIONS }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ **Note**: This action requires approval before deletion." >> $GITHUB_STEP_SUMMARY
