@@ -28,6 +28,11 @@ on:
         type: boolean
         default: false
 
+# Allow workflow to trigger other workflows
+permissions:
+  actions: write
+  contents: read
+
 jobs:
   # Validate rollback target exists
   validate-target:
