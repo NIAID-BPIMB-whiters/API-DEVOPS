@@ -149,7 +149,7 @@ jobs:
   # Cleanup orphaned APIs in DEV after successful deployment
   Cleanup-DEV-Orphaned-APIs:
     needs: Tag-DEV-Deployment
-    if: needs.Tag-DEV-Deployment.result == 'success'
+    if: always() && needs.Tag-DEV-Deployment.result == 'success'
     runs-on: ubuntu-latest
     environment: apim-bpimb-dev
     steps:
@@ -353,7 +353,7 @@ jobs:
   # Cleanup orphaned APIs in QA after successful deployment
   Cleanup-QA-Orphaned-APIs:
     needs: Tag-QA-Deployment
-    if: needs.Tag-QA-Deployment.result == 'success'
+    if: always() && needs.Tag-QA-Deployment.result == 'success'
     runs-on: ubuntu-latest
     environment: apim-bpimb-qa
     steps:
