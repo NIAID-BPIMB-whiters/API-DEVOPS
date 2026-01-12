@@ -2,7 +2,7 @@
 
 permissions:
   actions: write
-  contents: read
+  contents: write  # Required for creating deployment tags
 
 on:
   # Triggers the workflow on push events but only for the main branch
@@ -107,6 +107,44 @@ jobs:
           fi
         env:
           GH_TOKEN: ${{ github.token }}
+  
+  # Tag successful DEV deployment for rollback capability
+  Tag-DEV-Deployment:
+    needs: [get-commit, Test-DEV-After-Deploy]
+    if: needs.Test-DEV-After-Deploy.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Create deployment tag
+        run: |
+          # Generate tag name with timestamp and short SHA
+          TIMESTAMP=$(date -u +%Y%m%d-%H%M%S)
+          SHORT_SHA=$(git rev-parse --short ${{ needs.get-commit.outputs.commit_id }})
+          TAG_NAME="deploy-dev-${TIMESTAMP}-${SHORT_SHA}"
+          
+          # Create annotated tag with deployment metadata
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git tag -a "$TAG_NAME" ${{ needs.get-commit.outputs.commit_id }} -m "DEV deployment - $(date -u '+%Y-%m-%d %H:%M:%S UTC')" \
+            -m "Deployed by: ${{ github.actor }}" \
+            -m "Workflow: ${{ github.run_id }}" \
+            -m "Tests: Passed"
+          
+          git push origin "$TAG_NAME"
+          
+          echo "✅ Created deployment tag: $TAG_NAME" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Use this tag for rollback:" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "gh workflow run rollback-deployment.yaml -f ENVIRONMENT=apim-bpimb-dev -f ROLLBACK_TARGET=$TAG_NAME" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
   # Manual approval gate before QA deployment
   approve-qa-deployment:
@@ -195,6 +233,44 @@ jobs:
           fi
         env:
           GH_TOKEN: ${{ github.token }}
+  
+  # Tag successful QA deployment for rollback capability
+  Tag-QA-Deployment:
+    needs: [get-commit, Test-QA-After-Deploy]
+    if: needs.Test-QA-After-Deploy.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Create deployment tag
+        run: |
+          # Generate tag name with timestamp and short SHA
+          TIMESTAMP=$(date -u +%Y%m%d-%H%M%S)
+          SHORT_SHA=$(git rev-parse --short ${{ needs.get-commit.outputs.commit_id }})
+          TAG_NAME="deploy-qa-${TIMESTAMP}-${SHORT_SHA}"
+          
+          # Create annotated tag with deployment metadata
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git tag -a "$TAG_NAME" ${{ needs.get-commit.outputs.commit_id }} -m "QA deployment - $(date -u '+%Y-%m-%d %H:%M:%S UTC')" \
+            -m "Deployed by: ${{ github.actor }}" \
+            -m "Workflow: ${{ github.run_id }}" \
+            -m "Tests: Passed"
+          
+          git push origin "$TAG_NAME"
+          
+          echo "✅ Created deployment tag: $TAG_NAME" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Use this tag for rollback:" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "gh workflow run rollback-deployment.yaml -f ENVIRONMENT=apim-bpimb-qa -f ROLLBACK_TARGET=$TAG_NAME" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
   # Optional: Check Azure Advisor compliance after deployment
   # Uncomment to enable post-deployment compliance checks

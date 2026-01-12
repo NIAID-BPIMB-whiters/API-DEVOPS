@@ -1,0 +1,289 @@
+# =============================================================================
+# VM RESOURCE CLEANUP MONITOR
+# =============================================================================
+# This workflow checks for orphaned test VM resources that failed to cleanup
+# Runs weekly and sends email notifications when cleanup is needed
+# =============================================================================
+
+name: Check VM Resource Cleanup
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Weekly on Mondays at 9 AM UTC
+  workflow_dispatch:
+    inputs:
+      SEND_EMAIL_ON_SUCCESS:
+        description: 'Send email even if no issues found'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  check-orphaned-resources:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Azure Login
+        run: |
+          az login --service-principal \
+            --username ${{ secrets.AZURE_CLIENT_ID }} \
+            --password ${{ secrets.AZURE_CLIENT_SECRET }} \
+            --tenant ${{ secrets.AZURE_TENANT_ID }}
+          az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      
+      - name: Check for orphaned test VMs
+        id: check-vms
+        run: |
+          RESOURCE_GROUP="nih-niaid-azurestrides-dev-rg-admin-az"
+          
+          # Find VMs matching test-runner-* pattern
+          ORPHANED_VMS=$(az vm list --resource-group "$RESOURCE_GROUP" \
+            --query "[?starts_with(name, 'test-runner-')].{Name:name, Created:timeCreated, PowerState:powerState}" \
+            -o json)
+          
+          VM_COUNT=$(echo "$ORPHANED_VMS" | jq 'length')
+          echo "vm-count=$VM_COUNT" >> $GITHUB_OUTPUT
+          
+          if [ "$VM_COUNT" -gt 0 ]; then
+            echo "⚠️ Found $VM_COUNT orphaned test VM(s):"
+            echo "$ORPHANED_VMS" | jq -r '.[] | "  - \(.Name) (Created: \(.Created))"'
+            echo "orphaned-vms<<EOF" >> $GITHUB_OUTPUT
+            echo "$ORPHANED_VMS" | jq -c >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "✅ No orphaned test VMs found"
+          fi
+      
+      - name: Check for orphaned NICs
+        id: check-nics
+        run: |
+          RESOURCE_GROUP="nih-niaid-azurestrides-dev-rg-admin-az"
+          
+          # Find NICs matching test-runner-* pattern that aren't attached
+          ORPHANED_NICS=$(az network nic list --resource-group "$RESOURCE_GROUP" \
+            --query "[?starts_with(name, 'test-runner-') && virtualMachine == null].{Name:name, Location:location}" \
+            -o json)
+          
+          NIC_COUNT=$(echo "$ORPHANED_NICS" | jq 'length')
+          echo "nic-count=$NIC_COUNT" >> $GITHUB_OUTPUT
+          
+          if [ "$NIC_COUNT" -gt 0 ]; then
+            echo "⚠️ Found $NIC_COUNT orphaned NIC(s):"
+            echo "$ORPHANED_NICS" | jq -r '.[] | "  - \(.Name)"'
+            echo "orphaned-nics<<EOF" >> $GITHUB_OUTPUT
+            echo "$ORPHANED_NICS" | jq -c >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "✅ No orphaned NICs found"
+          fi
+      
+      - name: Check for orphaned disks
+        id: check-disks
+        run: |
+          RESOURCE_GROUP="nih-niaid-azurestrides-dev-rg-admin-az"
+          
+          # Find disks matching test-runner-* pattern that aren't attached
+          ORPHANED_DISKS=$(az disk list --resource-group "$RESOURCE_GROUP" \
+            --query "[?starts_with(name, 'test-runner-') && diskState == 'Unattached'].{Name:name, SizeGB:diskSizeGb, Created:timeCreated}" \
+            -o json)
+          
+          DISK_COUNT=$(echo "$ORPHANED_DISKS" | jq 'length')
+          echo "disk-count=$DISK_COUNT" >> $GITHUB_OUTPUT
+          
+          if [ "$DISK_COUNT" -gt 0 ]; then
+            echo "⚠️ Found $DISK_COUNT orphaned disk(s):"
+            echo "$ORPHANED_DISKS" | jq -r '.[] | "  - \(.Name) (\(.SizeGB)GB, Created: \(.Created))"'
+            echo "orphaned-disks<<EOF" >> $GITHUB_OUTPUT
+            echo "$ORPHANED_DISKS" | jq -c >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "✅ No orphaned disks found"
+          fi
+      
+      - name: Generate cleanup report
+        id: generate-report
+        run: |
+          TOTAL_ISSUES=$(( ${{ steps.check-vms.outputs.vm-count }} + ${{ steps.check-nics.outputs.nic-count }} + ${{ steps.check-disks.outputs.disk-count }} ))
+          echo "total-issues=$TOTAL_ISSUES" >> $GITHUB_OUTPUT
+          
+          REPORT_FILE="vm-cleanup-report.md"
+          TIMESTAMP=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          
+          # Generate report header
+          {
+            echo "# VM Resource Cleanup Report"
+            echo "**Generated**: $TIMESTAMP"
+            echo "**Resource Group**: nih-niaid-azurestrides-dev-rg-admin-az"
+            echo ""
+            echo "## Summary"
+            echo "| Resource Type | Count |"
+            echo "|--------------|-------|"
+            echo "| Orphaned VMs | ${{ steps.check-vms.outputs.vm-count }} |"
+            echo "| Orphaned NICs | ${{ steps.check-nics.outputs.nic-count }} |"
+            echo "| Orphaned Disks | ${{ steps.check-disks.outputs.disk-count }} |"
+            echo "| **Total Issues** | **$TOTAL_ISSUES** |"
+            echo ""
+          } > "$REPORT_FILE"
+
+          # Add VM details
+          if [ "${{ steps.check-vms.outputs.vm-count }}" -gt 0 ]; then
+            {
+              echo "## ⚠️ Orphaned Virtual Machines"
+              echo ""
+              echo "These test VMs failed to cleanup and should be manually removed:"
+              echo ""
+            } >> "$REPORT_FILE"
+            
+            echo '${{ steps.check-vms.outputs.orphaned-vms }}' | jq -r '.[] | "- **\(.Name)**\n  - Created: \(.Created)\n  - Power State: \(.PowerState)\n"' >> "$REPORT_FILE"
+            
+            {
+              echo ""
+              echo "### Cleanup Command:"
+              echo '```bash'
+              echo "# Delete orphaned VMs (run for each VM name above)"
+              echo "az vm delete --resource-group nih-niaid-azurestrides-dev-rg-admin-az --name <VM_NAME> --yes"
+              echo '```'
+              echo ""
+            } >> "$REPORT_FILE"
+          fi
+          
+          # Add NIC details
+          if [ "${{ steps.check-nics.outputs.nic-count }}" -gt 0 ]; then
+            {
+              echo "## ⚠️ Orphaned Network Interfaces"
+              echo ""
+              echo "These NICs are not attached to any VM and should be removed:"
+              echo ""
+            } >> "$REPORT_FILE"
+            
+            echo '${{ steps.check-nics.outputs.orphaned-nics }}' | jq -r '.[] | "- **\(.Name)**\n  - Location: \(.Location)\n"' >> "$REPORT_FILE"
+            
+            {
+              echo ""
+              echo "### Cleanup Command:"
+              echo '```bash'
+              echo "# Delete orphaned NICs (run for each NIC name above)"
+              echo "az network nic delete --resource-group nih-niaid-azurestrides-dev-rg-admin-az --name <NIC_NAME>"
+              echo '```'
+              echo ""
+            } >> "$REPORT_FILE"
+          fi
+          
+          # Add disk details
+          if [ "${{ steps.check-disks.outputs.disk-count }}" -gt 0 ]; then
+            {
+              echo "## ⚠️ Orphaned Disks"
+              echo ""
+              echo "These disks are unattached and should be removed:"
+              echo ""
+            } >> "$REPORT_FILE"
+            
+            echo '${{ steps.check-disks.outputs.orphaned-disks }}' | jq -r '.[] | "- **\(.Name)**\n  - Size: \(.SizeGB)GB\n  - Created: \(.Created)\n"' >> "$REPORT_FILE"
+            
+            {
+              echo ""
+              echo "### Cleanup Command:"
+              echo '```bash'
+              echo "# Delete orphaned disks (run for each disk name above)"
+              echo "az disk delete --resource-group nih-niaid-azurestrides-dev-rg-admin-az --name <DISK_NAME> --yes"
+              echo '```'
+              echo ""
+            } >> "$REPORT_FILE"
+          fi
+          
+          # Add all-clear message if no issues
+          if [ "$TOTAL_ISSUES" -eq 0 ]; then
+            {
+              echo "## ✅ All Clear"
+              echo ""
+              echo "No orphaned VM resources found. Cleanup processes are working correctly."
+              echo ""
+            } >> "$REPORT_FILE"
+          fi
+          
+          # Add footer with recommendations
+          {
+            echo ""
+            echo "## Recommendations"
+            echo ""
+            echo "1. **Investigate Failed Workflows**: Check recent workflow runs for ephemeral VM tests"
+            echo "2. **Review Cleanup Jobs**: Ensure cleanup jobs are running with if: always() condition"
+            echo "3. **Monitor IP Exhaustion**: Orphaned NICs can cause subnet IP exhaustion"
+            echo "4. **Cost Impact**: Orphaned VMs and disks incur ongoing Azure costs"
+            echo ""
+            echo "## Automated Cleanup Script"
+            echo ""
+            echo "To cleanup all orphaned resources at once:"
+            echo ""
+            echo '```bash'
+            echo "# Login to Azure"
+            echo "az login"
+            echo ""
+            echo "# Set subscription (use your actual subscription ID)"
+            echo "az account set --subscription YOUR_SUBSCRIPTION_ID"
+            echo ""
+            echo "# Delete all orphaned test-runner VMs"
+            echo "az vm list --resource-group nih-niaid-azurestrides-dev-rg-admin-az \\"
+            echo "  --query \"[?starts_with(name, 'test-runner-')].name\" -o tsv | \\"
+            echo "  xargs -I {} az vm delete --resource-group nih-niaid-azurestrides-dev-rg-admin-az --name {} --yes"
+            echo ""
+            echo "# Delete all orphaned test-runner NICs"
+            echo "az network nic list --resource-group nih-niaid-azurestrides-dev-rg-admin-az \\"
+            echo "  --query \"[?starts_with(name, 'test-runner-') && virtualMachine == null].name\" -o tsv | \\"
+            echo "  xargs -I {} az network nic delete --resource-group nih-niaid-azurestrides-dev-rg-admin-az --name {}"
+            echo ""
+            echo "# Delete all orphaned test-runner disks"
+            echo "az disk list --resource-group nih-niaid-azurestrides-dev-rg-admin-az \\"
+            echo "  --query \"[?starts_with(name, 'test-runner-') && diskState == 'Unattached'].name\" -o tsv | \\"
+            echo "  xargs -I {} az disk delete --resource-group nih-niaid-azurestrides-dev-rg-admin-az --name {} --yes"
+            echo '```'
+          } >> "$REPORT_FILE"
+
+          echo "Report generated: $REPORT_FILE"
+          
+          # Display report in workflow output
+          echo "## VM Cleanup Report" >> $GITHUB_STEP_SUMMARY
+          cat "$REPORT_FILE" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Upload cleanup report
+        uses: actions/upload-artifact@v4
+        with:
+          name: vm-cleanup-report
+          path: vm-cleanup-report.md
+          retention-days: 90
+      
+      - name: Set workflow status
+        id: set-status
+        run: |
+          TOTAL_ISSUES=${{ steps.generate-report.outputs.total-issues }}
+          
+          if [ "$TOTAL_ISSUES" -gt 0 ]; then
+            echo "status=⚠️ CLEANUP REQUIRED" >> $GITHUB_OUTPUT
+            echo "::warning::Found $TOTAL_ISSUES orphaned VM resource(s) that need cleanup"
+          else
+            echo "status=✅ ALL CLEAR" >> $GITHUB_OUTPUT
+            echo "::notice::No orphaned VM resources found"
+          fi
+      
+      - name: Send email notification (via workflow failure)
+        if: steps.generate-report.outputs.total-issues > 0
+        run: |
+          echo "::error::🚨 VM CLEANUP REQUIRED: Found ${{ steps.generate-report.outputs.total-issues }} orphaned resources"
+          echo ""
+          echo "📊 Summary:"
+          echo "  - VMs: ${{ steps.check-vms.outputs.vm-count }}"
+          echo "  - NICs: ${{ steps.check-nics.outputs.nic-count }}"
+          echo "  - Disks: ${{ steps.check-disks.outputs.disk-count }}"
+          echo ""
+          echo "📥 Download the cleanup report artifact for detailed information"
+          echo "📧 Team notification: VM resources need manual cleanup"
+          echo ""
+          exit 1  # Fail workflow to trigger email notification
+
+      - name: Success notification
+        if: steps.generate-report.outputs.total-issues == 0 && github.event.inputs.SEND_EMAIL_ON_SUCCESS == 'true'
+        run: |
+          echo "✅ Weekly VM cleanup check completed successfully"
+          echo "No orphaned resources found - cleanup processes working correctly"

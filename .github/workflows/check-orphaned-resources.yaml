@@ -1,0 +1,149 @@
+name: Check for Orphaned Test Resources
+
+on:
+  schedule:
+    # Run every Monday at 9 AM UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: read
+
+jobs:
+  check-resources:
+    name: Check for Orphaned VMs, Disks, and NICs
+    runs-on: ubuntu-latest
+    environment: apim-bpimb-dev  # Use DEV environment for Azure credentials
+    
+    steps:
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      
+      - name: Check All Resource Groups for Orphaned Test Resources
+        id: check
+        run: |
+          echo "Checking for orphaned test runner resources..."
+          echo ""
+          
+          FOUND_ORPHANS=false
+          ORPHAN_DETAILS=""
+          
+          # Resource groups to check
+          RESOURCE_GROUPS=(
+            "nih-niaid-azurestrides-dev-rg-admin-az"
+            "niaid-bpimb-apim-dev-rg"
+            "niaid-bpimb-apim-qa-rg"
+          )
+          
+          for RG in "${RESOURCE_GROUPS[@]}"; do
+            echo "📁 Checking Resource Group: $RG"
+            
+            # Check for VMs
+            VMS=$(az vm list -g "$RG" --query "[?contains(name, 'test-runner')].name" -o tsv 2>/dev/null || echo "")
+            VM_COUNT=$(echo "$VMS" | grep -c . || echo "0")
+            
+            # Check for Disks
+            DISKS=$(az disk list -g "$RG" --query "[?contains(name, 'test-runner')].name" -o tsv 2>/dev/null || echo "")
+            DISK_COUNT=$(echo "$DISKS" | grep -c . || echo "0")
+            
+            # Check for NICs
+            NICS=$(az network nic list -g "$RG" --query "[?contains(name, 'test-runner')].name" -o tsv 2>/dev/null || echo "")
+            NIC_COUNT=$(echo "$NICS" | grep -c . || echo "0")
+            
+            # Report findings
+            if [ "$VM_COUNT" -gt 0 ] || [ "$DISK_COUNT" -gt 0 ] || [ "$NIC_COUNT" -gt 0 ]; then
+              FOUND_ORPHANS=true
+              echo "  ⚠️  Found orphaned resources: $VM_COUNT VMs, $DISK_COUNT disks, $NIC_COUNT NICs"
+              
+              ORPHAN_DETAILS="${ORPHAN_DETAILS}
+              ### Resource Group: \`$RG\`
+              - **VMs**: $VM_COUNT
+              - **Disks**: $DISK_COUNT
+              - **NICs**: $NIC_COUNT
+              "
+              
+              if [ "$VM_COUNT" -gt 0 ]; then
+                echo "  VMs:"
+                echo "$VMS" | while read -r vm; do
+                  echo "    - $vm"
+                  ORPHAN_DETAILS="${ORPHAN_DETAILS}  - VM: \`$vm\`"$'\n'
+                done
+              fi
+              
+              if [ "$DISK_COUNT" -gt 0 ]; then
+                echo "  Disks:"
+                echo "$DISKS" | while read -r disk; do
+                  echo "    - $disk"
+                  ORPHAN_DETAILS="${ORPHAN_DETAILS}  - Disk: \`$disk\`"$'\n'
+                done
+              fi
+              
+              if [ "$NIC_COUNT" -gt 0 ]; then
+                echo "  NICs:"
+                echo "$NICS" | while read -r nic; do
+                  echo "    - $nic"
+                  ORPHAN_DETAILS="${ORPHAN_DETAILS}  - NIC: \`$nic\`"$'\n'
+                done
+              fi
+            else
+              echo "  ✅ Clean (no orphaned resources)"
+            fi
+            echo ""
+          done
+          
+          # Set output for next step
+          echo "found_orphans=$FOUND_ORPHANS" >> $GITHUB_OUTPUT
+          
+          # Save details to file for job summary
+          echo "$ORPHAN_DETAILS" > orphan_details.txt
+          
+          if [ "$FOUND_ORPHANS" = "true" ]; then
+            echo "::error::Orphaned test runner resources found! Manual cleanup required."
+            exit 1
+          else
+            echo "✅ All resource groups are clean - no orphaned test resources found."
+          fi
+      
+      - name: Create Job Summary
+        if: always()
+        run: |
+          if [ "${{ steps.check.outputs.found_orphans }}" = "true" ]; then
+            cat << 'EOF' >> $GITHUB_STEP_SUMMARY
+          ## ⚠️ Orphaned Test Resources Found
+          
+          The following test runner resources were not automatically cleaned up and require manual intervention:
+          
+          EOF
+            cat orphan_details.txt >> $GITHUB_STEP_SUMMARY
+            cat << 'EOF' >> $GITHUB_STEP_SUMMARY
+          
+          ### Manual Cleanup Instructions
+          
+          Run the following commands to clean up orphaned resources:
+          
+          \`\`\`bash
+          # For each VM found:
+          az vm delete --resource-group <RG> --name <VM_NAME> --yes
+          
+          # For each disk found:
+          az disk delete --resource-group <RG> --name <DISK_NAME> --yes
+          
+          # For each NIC found:
+          az network nic delete --resource-group <RG> --name <NIC_NAME> --yes
+          \`\`\`
+          
+          **Note**: This indicates a test workflow cleanup failure. Check recent test runs for errors.
+          EOF
+          else
+            cat << 'EOF' >> $GITHUB_STEP_SUMMARY
+          ## ✅ No Orphaned Resources
+          
+          All resource groups are clean. No test runner VMs, disks, or NICs found.
+          
+          **Last Checked**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          EOF
+          fi

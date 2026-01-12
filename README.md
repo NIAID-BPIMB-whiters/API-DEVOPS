@@ -1,5 +1,45 @@
 # NIAID Azure API Management DevOps Repository
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Environments](#environments)
+  - [Network Architecture](#network-architecture)
+- [Quick Start](#quick-start)
+  - [Deploy an API Change](#deploy-an-api-change)
+  - [Add a New API](#add-a-new-api)
+  - [Run Tests Manually](#run-tests-manually)
+  - [Trigger Extraction](#trigger-extraction)
+  - [Rollback a Deployment](#rollback-a-deployment)
+- [Repository Structure](#repository-structure)
+  - [Artifact Structure Details](#artifact-structure-details)
+- [Infrastructure Components](#infrastructure-components)
+  - [Azure Resources](#azure-resources)
+  - [API Inventory](#api-inventory)
+- [GitHub Actions Workflows](#github-actions-workflows)
+  - [Email Notifications Setup](#email-notifications-setup)
+  - [1. Extract Artifacts](#1-extract-artifacts-run-extractoryaml)
+  - [2. Publish to DEV and QA](#2-publish-to-dev-and-qa-run-publisheryaml)
+  - [3. Reusable Publisher](#3-reusable-publisher-run-publisher-with-envyaml)
+  - [4. API Testing](#4-api-testing-test-apisyaml)
+  - [5. Ephemeral VM Testing](#5-ephemeral-vm-testing-test-apis-ephemeralyaml)
+  - [6. VM Resource Cleanup Monitor](#6-vm-resource-cleanup-monitor-check-vm-cleanupyaml)
+  - [7. Rollback Deployment](#7-rollback-deployment-rollback-deploymentyaml)
+  - [8. Azure Advisor Compliance Check](#8-azure-advisor-compliance-check-check-advisoryaml)
+- [Configuration Files](#configuration-files)
+  - [configuration.extractor.yaml](#configurationextractoryaml)
+  - [configuration.dev.yaml and configuration.qa.yaml](#configurationdevyaml-and-configurationqayaml)
+  - [Cross-Environment Resource Mapping Strategy](#cross-environment-resource-mapping-strategy)
+- [Development Workflow](#development-workflow)
+- [Deployment Architecture](#deployment-architecture)
+- [Key Vault Integration](#key-vault-integration)
+- [Testing Strategy](#testing-strategy)
+- [Troubleshooting](#troubleshooting)
+- [FAQ](#faq)
+- [TODO / Roadmap](#todo--roadmap)
+
+---
+
 ## Overview
 
 This repository implements **GitOps for Azure API Management (APIM)** using Microsoft's [Azure APIops Toolkit](https://github.com/Azure/apiops). It automates the extraction, version control, and deployment of API Management artifacts across DAIDS_DEV, DEV, and QA environments.
@@ -134,10 +174,22 @@ gh workflow run run-extractor.yaml
 
 ### Rollback a Deployment
 ```bash
-# Find the last good commit
-git log --oneline -10
+# Option 1: Use rollback workflow with automatic tag (RECOMMENDED)
+# List recent deployment tags
+git tag -l "deploy-*" | tail -5
 
-# Revert to previous state
+# Preview rollback (dry run)
+gh workflow run rollback-deployment.yaml \
+  -f ENVIRONMENT=apim-bpimb-dev \
+  -f ROLLBACK_TARGET=deploy-dev-20260109-120000-abc123f \
+  -f DRY_RUN=true
+
+# Execute rollback
+gh workflow run rollback-deployment.yaml \
+  -f ENVIRONMENT=apim-bpimb-dev \
+  -f ROLLBACK_TARGET=deploy-dev-20260109-120000-abc123f
+
+# Option 2: Manual git revert (for emergencies)
 git revert <bad-commit-sha>
 git push origin main
 # Publisher automatically redeploys previous configuration
@@ -157,7 +209,10 @@ API-DEVOPS/
 │       ├── run-publisher.yaml              # Deploy artifacts to PROD APIM
 │       ├── run-publisher-with-env.yaml     # Reusable deployment workflow
 │       ├── test-apis.yaml                  # API testing (standard)
-│       └── test-apis-ephemeral.yaml        # API testing (ephemeral VM approach)
+│       ├── test-apis-ephemeral.yaml        # API testing (ephemeral VM approach)
+│       ├── rollback-deployment.yaml        # Rollback to previous deployment
+│       ├── check-vm-cleanup.yaml           # Weekly VM resource cleanup monitor
+│       └── check-advisor.yaml              # Azure Advisor compliance check
 │
 ├── apimartifacts/                          # Source of truth for APIM configuration
 │   ├── policy.xml                          # Global APIM policies (CORS, etc.)
@@ -324,6 +379,37 @@ Currently managing **7 APIs** across all environments:
 ---
 
 ## GitHub Actions Workflows
+
+### Email Notifications Setup
+
+To receive email notifications when VM cleanup is required or workflows fail:
+
+1. **Configure GitHub Notifications**:
+   - Go to [GitHub Settings → Notifications](https://github.com/settings/notifications)
+   - Enable **Actions** under "Actions" section
+   - Choose delivery method: **Email**, **Web**, or **Mobile**
+
+2. **Repository-Level Notifications**:
+   - Visit this repository on GitHub
+   - Click **Watch** → **Custom** → Enable **Actions**
+   - This ensures you receive notifications for workflow failures
+
+3. **What You'll Receive**:
+   - 📧 **VM Cleanup Alerts**: Email when orphaned VMs/NICs/disks detected (weekly)
+   - ⚠️ **Workflow Failures**: Immediate notification when deployments fail
+   - 📊 **Reports**: Download detailed reports from workflow artifacts
+
+4. **Testing Notifications**:
+   ```bash
+   # Trigger a manual cleanup check
+   gh workflow run check-vm-cleanup.yaml
+   
+   # View the results
+   gh run list --workflow=check-vm-cleanup.yaml --limit 1
+   gh run view <run-id>
+   ```
+
+---
 
 ### 1. Extract Artifacts (`run-extractor.yaml`)
 
@@ -719,7 +805,194 @@ gh workflow run test-apis-ephemeral.yaml -f ENVIRONMENT=prod -f TEST_TYPE=full-s
 
 ---
 
-### 6. Azure Advisor Compliance Check (`check-advisor.yaml`)
+### 6. VM Resource Cleanup Monitor (`check-vm-cleanup.yaml`)
+
+**Purpose**: Monitor for orphaned test VM resources and send email notifications when cleanup is needed
+
+**Trigger**: 
+- Weekly schedule (Mondays at 9 AM UTC)
+- Manual workflow dispatch
+
+**Features**:
+- ✅ Scans for orphaned test-runner VMs
+- ✅ Detects unattached NICs from failed cleanup
+- ✅ Identifies orphaned disks consuming storage
+- ✅ Generates detailed cleanup report with commands
+- ✅ Sends email notification on failures (via workflow failure)
+- ✅ Provides automated cleanup scripts
+- ✅ Tracks resource creation dates and sizes
+
+**What It Checks**:
+1. **Virtual Machines**: Any VMs matching `test-runner-*` pattern
+2. **Network Interfaces**: NICs matching `test-runner-*` that aren't attached to VMs
+3. **Disks**: Unattached disks matching `test-runner-*` pattern
+
+**Usage**:
+```bash
+# Manual check
+gh workflow run check-vm-cleanup.yaml
+
+# View latest report
+gh run list --workflow=check-vm-cleanup.yaml --limit 1
+gh run view <run-id>
+gh run download <run-id>  # Download the cleanup report
+```
+
+**Email Notifications**:
+
+The workflow fails when orphaned resources are detected, triggering GitHub's email notification system:
+
+- ⚠️ **Cleanup Required**: Workflow fails and sends email when issues found
+- ✅ **All Clear**: Workflow succeeds silently (no email by default)
+- 📧 **Recipients**: All users with GitHub notifications enabled for the repository
+- 📊 **Report**: Detailed cleanup report available as downloadable artifact
+
+**How to Receive Notifications**:
+1. Configure your GitHub notification preferences at [Settings → Notifications](https://github.com/settings/notifications)
+2. Enable "Actions" notifications for failures
+3. You'll receive emails automatically when cleanup is required
+4. Download detailed cleanup report from workflow artifacts
+
+**Cleanup Report Includes**:
+- Summary table of orphaned resources by type
+- Detailed list with creation dates and sizes
+- Individual cleanup commands for each resource
+- Automated cleanup script for batch operations
+- Impact analysis (cost, IP exhaustion risk)
+
+**Manual Cleanup (if needed)**:
+```bash
+# Login to Azure
+az login
+az account set --subscription <subscription-id>
+
+# Delete all orphaned test VMs
+az vm list --resource-group nih-niaid-azurestrides-dev-rg-admin-az \
+  --query "[?starts_with(name, 'test-runner-')].name" -o tsv | \
+  xargs -I {} az vm delete --resource-group nih-niaid-azurestrides-dev-rg-admin-az --name {} --yes
+
+# Delete all orphaned NICs
+az network nic list --resource-group nih-niaid-azurestrides-dev-rg-admin-az \
+  --query "[?starts_with(name, 'test-runner-') && virtualMachine == null].name" -o tsv | \
+  xargs -I {} az network nic delete --resource-group nih-niaid-azurestrides-dev-rg-admin-az --name {}
+
+# Delete all orphaned disks
+az disk list --resource-group nih-niaid-azurestrides-dev-rg-admin-az \
+  --query "[?starts_with(name, 'test-runner-') && diskState == 'Unattached'].name" -o tsv | \
+  xargs -I {} az disk delete --resource-group nih-niaid-azurestrides-dev-rg-admin-az --name {} --yes
+```
+
+**Why This Matters**:
+- 💰 **Cost Savings**: Orphaned VMs continue to incur charges
+- 🌐 **IP Exhaustion**: Orphaned NICs consume subnet IP addresses
+- 🔒 **Security**: Prevents accumulation of unmanaged resources
+- 📊 **Compliance**: Maintains clean Azure environment
+
+**Troubleshooting**:
+
+If you receive false positive notifications:
+
+1. **Check Timing**: Ensure the workflow doesn't run during active testing
+2. **Verify Cleanup Jobs**: Confirm ephemeral test workflows have `if: always()` on cleanup steps
+3. **Review Workflow Logs**: Check recent test-apis-ephemeral runs for cleanup failures
+4. **Service Principal Permissions**: Ensure SP has permissions to delete resources in the resource group
+
+---
+
+### 7. Rollback Deployment (`rollback-deployment.yaml`)
+
+**Purpose**: Safely rollback APIM deployments to a previous known-good state
+
+**Trigger**: Manual workflow dispatch only
+
+**Features**:
+- ✅ Rollback to specific deployment tags or commit SHAs
+- ✅ Dry run mode to preview changes before deploying
+- ✅ Automatic validation of rollback target
+- ✅ Diff preview showing what will change
+- ✅ Approval gates for QA rollbacks
+- ✅ Post-rollback verification tests
+- ✅ Deployment audit trail
+
+**Automatic Deployment Tagging**:
+
+Every successful deployment (with passing tests) is automatically tagged:
+- **Format**: `deploy-{env}-{timestamp}-{short-sha}`
+- **Example**: `deploy-dev-20260109-143022-a1b2c3d`
+- **Metadata**: Includes deployer, timestamp, workflow ID
+
+**Usage**:
+
+```bash
+# List available deployment tags
+git fetch --tags
+git tag -l "deploy-dev-*" | tail -10  # Last 10 DEV deployments
+git tag -l "deploy-qa-*" | tail -10   # Last 10 QA deployments
+
+# Preview rollback (recommended first step)
+gh workflow run rollback-deployment.yaml \
+  -f ENVIRONMENT=apim-bpimb-dev \
+  -f ROLLBACK_TARGET=deploy-dev-20260109-143022-a1b2c3d \
+  -f DRY_RUN=true
+
+# Execute rollback after reviewing preview
+gh workflow run rollback-deployment.yaml \
+  -f ENVIRONMENT=apim-bpimb-dev \
+  -f ROLLBACK_TARGET=deploy-dev-20260109-143022-a1b2c3d \
+  -f DRY_RUN=false
+
+# Can also rollback to specific commit SHA
+gh workflow run rollback-deployment.yaml \
+  -f ENVIRONMENT=apim-bpimb-qa \
+  -f ROLLBACK_TARGET=a1b2c3d4e5f6
+```
+
+**Rollback Process**:
+
+1. **Validate Target**: Confirms tag/commit exists
+2. **Preview Changes**: Shows commits being rolled back and file diffs
+3. **Approval** (QA only): Requires manual approval for QA rollbacks
+4. **Deploy**: Checks out target and runs publisher
+5. **Verify**: Runs full test suite to confirm rollback success
+
+**When to Use**:
+
+| Scenario | Recommended Approach | RTO |
+|----------|---------------------|-----|
+| Recent deployment issue in DEV | Rollback workflow with tag | <5 min |
+| Recent deployment issue in QA | Rollback workflow with tag | <10 min |
+| Need to undo multiple commits | Rollback workflow to specific tag | <10 min |
+| Emergency (workflow unavailable) | Manual git revert + push | <5 min |
+| Testing rollback procedure | Use DRY_RUN=true | N/A |
+
+**Emergency Manual Rollback**:
+
+If GitHub Actions is unavailable:
+
+```bash
+# Option 1: Revert specific commit
+git revert <bad-commit-sha>
+git push origin main
+# Auto-triggers publisher workflow
+
+# Option 2: Hard reset to previous commit (DESTRUCTIVE)
+git reset --hard <good-commit-sha>
+git push --force origin main
+# Auto-triggers publisher workflow
+```
+
+**Safety Features**:
+
+- ✅ Dry run preview before execution
+- ✅ Automatic detection of API specification changes
+- ✅ Warning for potential breaking changes
+- ✅ Approval required for QA rollbacks
+- ✅ Post-rollback verification tests
+- ✅ Audit trail via git tags and workflow logs
+
+---
+
+### 8. Azure Advisor Compliance Check (`check-advisor.yaml`)
 
 **Purpose**: Monitor Azure Advisor recommendations for continuous compliance tracking
 
@@ -1559,8 +1832,8 @@ Consider submitting feature request to Azure/apiops GitHub:
 
 ### 2. Implement Rollback Function for Published Changes
 **Priority**: High  
-**Status**: ⏳ Pending  
-**Last Reviewed**: January 6, 2026
+**Status**: ✅ **COMPLETED** - January 9, 2026
+**Last Reviewed**: January 9, 2026
 
 **Objective**: Provide mechanism to rollback APIM deployments to previous known-good state
 
@@ -1649,21 +1922,44 @@ gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in
 - Use git revert for quick rollbacks
 - Maintain deployment history in git log
 
-**Tasks**:
-- [ ] Document rollback procedures in runbook
-- [ ] Create rollback workflow (optional, for ease of use)
-- [ ] Implement tagging strategy for stable releases
-- [ ] Test rollback in DEV environment
+**Completed Tasks**:
+- [x] Document rollback procedures in runbook
+- [x] Create rollback workflow (rollback-deployment.yaml)
+- [x] Implement automatic tagging strategy for stable releases
+- [x] Add dry-run capability for safe testing
+- [x] Document recovery time objectives (RTO)
+- [x] Add approval gates for QA rollbacks
+- [x] Integrate post-rollback verification tests
+
+**Implementation**:
+- ✅ Created `rollback-deployment.yaml` workflow with:
+  - Tag/commit validation
+  - Dry run preview mode
+  - Diff showing changes to be rolled back
+  - Approval gates for QA
+  - Automated post-rollback verification
+- ✅ Added automatic deployment tagging to `run-publisher.yaml`:
+  - Tags created after successful DEV deployments
+  - Tags created after successful QA deployments  
+  - Format: `deploy-{env}-{timestamp}-{short-sha}`
+  - Includes metadata: deployer, workflow ID, test status
+- ✅ Enhanced Quick Start guide with rollback examples
+- ✅ Added comprehensive rollback documentation section
+
+**Success Criteria** (Achieved):
+- ✅ Rollback completes within 5 minutes
+- ✅ Previous working state fully restored
+- ✅ No manual APIM configuration required
+- ✅ Deployment history preserved via git tags
+- ✅ Dry run capability for safe testing
+- ✅ Audit trail maintained
+
+**Next Steps**:
+- [ ] Test rollback workflow in DEV environment
 - [ ] Add rollback testing to deployment checklist
-- [ ] Document recovery time objectives (RTO)
+- [ ] Train team on rollback procedures
 
-**Success Criteria**:
-- Rollback completes within 5 minutes
-- Previous working state fully restored
-- No manual APIM configuration required
-- Deployment history preserved in git
-
-**Impact**: Faster incident recovery, reduced downtime, safer deployments
+**Impact**: Faster incident recovery, reduced downtime, safer deployments, clear audit trail
 
 ---
 

@@ -1,0 +1,276 @@
+# =============================================================================
+# ROLLBACK DEPLOYMENT WORKFLOW
+# =============================================================================
+# This workflow enables controlled rollback to a previous deployment state
+# Supports rolling back to specific tags or commit SHAs
+# Requires approval for QA rollbacks
+# =============================================================================
+
+name: Rollback Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      ENVIRONMENT:
+        description: 'Environment to rollback'
+        required: true
+        type: choice
+        options:
+          - apim-bpimb-dev
+          - apim-bpimb-qa
+      ROLLBACK_TARGET:
+        description: 'Rollback to (tag or commit SHA)'
+        required: true
+        type: string
+      DRY_RUN:
+        description: 'Dry run (preview changes without deploying)'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  # Validate rollback target exists
+  validate-target:
+    runs-on: ubuntu-latest
+    outputs:
+      target-sha: ${{ steps.validate.outputs.target_sha }}
+      target-type: ${{ steps.validate.outputs.target_type }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history needed to validate tags and commits
+      
+      - name: Validate rollback target
+        id: validate
+        run: |
+          TARGET="${{ github.event.inputs.ROLLBACK_TARGET }}"
+          
+          # Check if target is a tag
+          if git show-ref --tags "$TARGET" > /dev/null 2>&1; then
+            echo "✅ Found tag: $TARGET"
+            TARGET_SHA=$(git rev-list -n 1 "$TARGET")
+            echo "target_type=tag" >> $GITHUB_OUTPUT
+          # Check if target is a commit SHA
+          elif git cat-file -e "$TARGET^{commit}" 2>/dev/null; then
+            echo "✅ Found commit: $TARGET"
+            TARGET_SHA="$TARGET"
+            echo "target_type=commit" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Error: '$TARGET' is not a valid tag or commit SHA"
+            exit 1
+          fi
+          
+          echo "target_sha=$TARGET_SHA" >> $GITHUB_OUTPUT
+          echo "Target SHA: $TARGET_SHA"
+          
+          # Display commit information
+          echo "## Rollback Target Information" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Target**: $TARGET" >> $GITHUB_STEP_SUMMARY
+          echo "**Type**: tag or commit" >> $GITHUB_STEP_SUMMARY
+          echo "**SHA**: $TARGET_SHA" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Commit Details" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          git show --no-patch --format=fuller "$TARGET_SHA" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  # Preview changes that will be deployed
+  preview-changes:
+    needs: validate-target
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout current state
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Preview deployment changes
+        run: |
+          CURRENT_SHA="${{ github.sha }}"
+          TARGET_SHA="${{ needs.validate-target.outputs.target-sha }}"
+          
+          echo "## Deployment Preview" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Current State**: $CURRENT_SHA" >> $GITHUB_STEP_SUMMARY
+          echo "**Rollback To**: $TARGET_SHA (${{ github.event.inputs.ROLLBACK_TARGET }})" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: ${{ github.event.inputs.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Dry Run**: ${{ github.event.inputs.DRY_RUN }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Show commits being rolled back
+          echo "### Commits Being Rolled Back" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          git log --oneline "$TARGET_SHA..$CURRENT_SHA" >> $GITHUB_STEP_SUMMARY || echo "No commits to rollback" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Show file changes
+          echo "### Files That Will Change" >> $GITHUB_STEP_SUMMARY
+          echo '```diff' >> $GITHUB_STEP_SUMMARY
+          git diff --stat "$CURRENT_SHA" "$TARGET_SHA" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Count API changes
+          API_CHANGES=$(git diff --name-only "$CURRENT_SHA" "$TARGET_SHA" | grep "apimartifacts/apis/" | wc -l)
+          echo "**APIs Affected**: $API_CHANGES" >> $GITHUB_STEP_SUMMARY
+          
+          if [ $API_CHANGES -gt 0 ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### API Changes" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            git diff --name-only "$CURRENT_SHA" "$TARGET_SHA" | grep "apimartifacts/apis/" | head -20 >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - name: Check for breaking changes
+        run: |
+          TARGET_SHA="${{ needs.validate-target.outputs.target-sha }}"
+          
+          # Look for specification changes (potential breaking changes)
+          SPEC_CHANGES=$(git diff --name-only "${{ github.sha }}" "$TARGET_SHA" | grep "specification.yaml" | wc -l)
+          
+          if [ $SPEC_CHANGES -gt 0 ]; then
+            echo "::warning::⚠️ Rollback includes $SPEC_CHANGES API specification changes - review carefully"
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### ⚠️ Warning: API Specification Changes" >> $GITHUB_STEP_SUMMARY
+            echo "This rollback will modify $SPEC_CHANGES API specification(s). Review for breaking changes." >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # Approval gate for QA rollbacks
+  approve-qa-rollback:
+    if: github.event.inputs.ENVIRONMENT == 'apim-bpimb-qa' && github.event.inputs.DRY_RUN == 'false'
+    needs: [validate-target, preview-changes]
+    runs-on: ubuntu-latest
+    environment:
+      name: approve-apim-bpimb-qa
+    steps:
+      - name: QA rollback approved
+        run: |
+          echo "✅ QA rollback approved"
+          echo "Proceeding with rollback to ${{ github.event.inputs.ROLLBACK_TARGET }}"
+
+  # Perform the rollback deployment
+  execute-rollback:
+    needs: [validate-target, preview-changes, approve-qa-rollback]
+    if: |
+      always() && 
+      needs.validate-target.result == 'success' &&
+      needs.preview-changes.result == 'success' &&
+      (needs.approve-qa-rollback.result == 'success' || needs.approve-qa-rollback.result == 'skipped') &&
+      github.event.inputs.DRY_RUN == 'false'
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.ENVIRONMENT }}
+    steps:
+      - name: Checkout rollback target
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate-target.outputs.target-sha }}
+      
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      
+      - name: Deploy rollback to ${{ github.event.inputs.ENVIRONMENT }}
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_RESOURCE_GROUP_NAME: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}
+          API_MANAGEMENT_SERVICE_NAME: ${{ secrets.API_MANAGEMENT_SERVICE_NAME }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Determine config file based on environment
+          if [ "${{ github.event.inputs.ENVIRONMENT }}" == "apim-bpimb-dev" ]; then
+            CONFIG_FILE="configuration.dev.yaml"
+          else
+            CONFIG_FILE="configuration.qa.yaml"
+          fi
+          
+          echo "Deploying rollback using $CONFIG_FILE"
+          echo "Environment: ${{ github.event.inputs.ENVIRONMENT }}"
+          echo "Target SHA: ${{ needs.validate-target.outputs.target-sha }}"
+          
+          # Trigger publisher workflow manually
+          gh workflow run run-publisher.yaml \
+            -f COMMIT_ID_CHOICE="publish-all-artifacts-in-repo" \
+            --ref ${{ needs.validate-target.outputs.target-sha }}
+          
+          echo "Rollback deployment triggered"
+      
+      - name: Create rollback record
+        run: |
+          echo "## ✅ Rollback Completed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: ${{ github.event.inputs.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Rolled Back To**: ${{ github.event.inputs.ROLLBACK_TARGET }}" >> $GITHUB_STEP_SUMMARY
+          echo "**SHA**: ${{ needs.validate-target.outputs.target-sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered By**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Timestamp**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  # Run tests after rollback
+  verify-rollback:
+    needs: execute-rollback
+    if: needs.execute-rollback.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger post-rollback tests
+        run: |
+          echo "Triggering verification tests for ${{ github.event.inputs.ENVIRONMENT }}"
+          
+          gh workflow run test-apis-ephemeral.yaml \
+            -f ENVIRONMENT=${{ github.event.inputs.ENVIRONMENT }} \
+            -f TEST_TYPE=full-suite \
+            --repo ${{ github.repository }}
+          
+          # Wait for workflow to start
+          echo "Waiting for test workflow to start..."
+          for i in {1..30}; do
+            RUN_ID=$(gh run list --workflow=test-apis-ephemeral.yaml --repo ${{ github.repository }} --limit 1 --json databaseId --jq '.[0].databaseId')
+            if [ -n "$RUN_ID" ]; then
+              echo "✅ Test workflow started with ID: $RUN_ID"
+              break
+            fi
+            sleep 1
+          done
+          
+          # Wait for tests to complete
+          if [ -n "$RUN_ID" ]; then
+            echo "Waiting for verification tests to complete..."
+            gh run watch $RUN_ID --repo ${{ github.repository }} --exit-status
+            
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### ✅ Post-Rollback Verification" >> $GITHUB_STEP_SUMMARY
+            echo "All tests passed. Rollback verified successfully." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "::error::Test workflow did not start"
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  # Dry run summary (if enabled)
+  dry-run-summary:
+    needs: [validate-target, preview-changes]
+    if: github.event.inputs.DRY_RUN == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Display dry run summary
+        run: |
+          echo "## 🔍 Dry Run Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**This was a preview only - no changes were deployed**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "To execute this rollback:" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "gh workflow run rollback-deployment.yaml \\" >> $GITHUB_STEP_SUMMARY
+          echo "  -f ENVIRONMENT=${{ github.event.inputs.ENVIRONMENT }} \\" >> $GITHUB_STEP_SUMMARY
+          echo "  -f ROLLBACK_TARGET=${{ github.event.inputs.ROLLBACK_TARGET }} \\" >> $GITHUB_STEP_SUMMARY
+          echo "  -f DRY_RUN=false" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Review the preview changes above before proceeding." >> $GITHUB_STEP_SUMMARY
