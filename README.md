@@ -176,25 +176,37 @@ gh workflow run run-extractor.yaml
 
 ### Rollback a Deployment
 ```bash
-# Option 1: Use rollback workflow with automatic tag (RECOMMENDED)
-# List recent deployment tags
-git tag -l "deploy-*" | tail -5
+# Step 1: List recent deployment tags
+git fetch --tags
+git tag -l "deploy-dev-*" --sort=-creatordate | head -5  # Last 5 DEV deployments
+git tag -l "deploy-qa-*" --sort=-creatordate | head -5   # Last 5 QA deployments
 
-# Preview rollback (dry run)
+# Step 2: View tag details
+git show deploy-dev-20260112-214435-0015df2
+
+# Step 3: Preview rollback (STRONGLY RECOMMENDED)
 gh workflow run rollback-deployment.yaml \
   -f ENVIRONMENT=apim-bpimb-dev \
-  -f ROLLBACK_TARGET=deploy-dev-20260109-120000-abc123f \
+  -f ROLLBACK_TARGET=deploy-dev-20260112-214435-0015df2 \
   -f DRY_RUN=true
 
-# Execute rollback
+# Step 4: View dry-run results
+gh run list --workflow=rollback-deployment.yaml --limit 1
+gh run view <run-id>  # Check preview in Actions summary
+
+# Step 5: Execute rollback after reviewing
 gh workflow run rollback-deployment.yaml \
   -f ENVIRONMENT=apim-bpimb-dev \
-  -f ROLLBACK_TARGET=deploy-dev-20260109-120000-abc123f
+  -f ROLLBACK_TARGET=deploy-dev-20260112-214435-0015df2 \
+  -f DRY_RUN=false
 
-# Option 2: Manual git revert (for emergencies)
-git revert <bad-commit-sha>
+# Step 6: Monitor execution
+gh run watch <run-id>
+
+# Emergency Option: Manual git revert (if Actions unavailable)
+git revert <bad-commit-sha> --no-edit
 git push origin main
-# Publisher automatically redeploys previous configuration
+# Publisher automatically redeploys previous configuration when Actions comes back
 ```
 
 **Need more details?** See [Development Workflow](#development-workflow) and [Deployment Architecture](#deployment-architecture) sections below.
@@ -921,90 +933,521 @@ If you receive false positive notifications:
 
 **Trigger**: Manual workflow dispatch only
 
+**Status**: ✅ **Production-ready** - Successfully tested on January 12, 2026
+
 **Features**:
 - ✅ Rollback to specific deployment tags or commit SHAs
 - ✅ Dry run mode to preview changes before deploying
 - ✅ Automatic validation of rollback target
 - ✅ Diff preview showing what will change
-- ✅ Approval gates for QA rollbacks
+- ✅ Approval gates for QA rollbacks (DEV rollbacks require no approval)
 - ✅ Post-rollback verification tests
 - ✅ Deployment audit trail
+- ✅ Automatic creation of new deployment tag after successful rollback
+- ✅ Works with tag-based rollbacks (recommended) and commit SHA rollbacks
 
 **Automatic Deployment Tagging**:
 
 Every successful deployment (with passing tests) is automatically tagged:
 - **Format**: `deploy-{env}-{timestamp}-{short-sha}`
-- **Example**: `deploy-dev-20260109-143022-a1b2c3d`
+- **Example**: `deploy-dev-20260112-214435-0015df2`
 - **Metadata**: Includes deployer, timestamp, workflow ID
+- **Created by**: `Tag-DEV-Deployment` and `Tag-QA-Deployment` jobs in publisher workflow
+- **Trigger**: Runs after successful tests (Test-DEV-After-Deploy / Test-QA-After-Deploy)
+
+**Production Test Results (January 12, 2026)**:
+
+Successfully executed end-to-end rollback workflow:
+- ✅ Created breaking change (forced 500 error in test API)
+- ✅ Deployed breaking change to DEV (tag: `deploy-dev-20260112-205014-d4dd75e`)
+- ✅ Executed dry-run rollback preview (workflow 20935089785)
+- ✅ Executed actual rollback to previous good state (tag: `deploy-dev-20260112-201504-0015df2`)
+- ✅ New deployment tag created: `deploy-dev-20260112-214435-0015df2`
+- ✅ Post-rollback verification tests passed
+- ⏱️ **Total recovery time**: ~6 minutes (dry-run + actual rollback)
+
+---
+
+## 🚨 Step-by-Step Recovery Guide
+
+**Scenario**: A deployment to DEV or QA has caused API failures and you need to rollback immediately.
+
+### Step 1: Identify the Problem
+
+**Symptoms that require rollback**:
+- APIs returning 500/502/503 errors
+- Authentication/authorization failures
+- Policy violations causing request failures
+- Backend service connectivity issues after deployment
+- Breaking changes in API specifications
+
+**Verify the issue**:
+```bash
+# Check recent publisher deployments
+gh run list --workflow=run-publisher.yaml --limit 5
+
+# Check test results
+gh run list --workflow=test-apis-ephemeral.yaml --limit 3
+gh run view <test-run-id> --log | grep -i "error\|failed\|500\|502\|503"
+
+# Check APIM directly (if you have access)
+curl -H "Ocp-Apim-Subscription-Key: $KEY" https://niaid-bpimb-apim-dev.azure-api.net/your-api
+```
+
+### Step 2: Find Available Deployment Tags
+
+**Every successful deployment automatically creates a tag**. These tags are your rollback points.
+
+```bash
+# Sync tags from GitHub (IMPORTANT - run this first!)
+git fetch --tags --force
+
+# List recent DEV deployments (most recent first)
+git tag -l "deploy-dev-*" --sort=-creatordate | head -10
+
+# Example output:
+# deploy-dev-20260112-214435-0015df2  <- Current (may be broken)
+# deploy-dev-20260112-201504-0015df2  <- Last known good
+# deploy-dev-20260112-190042-4d53845
+# deploy-dev-20260111-153022-a1b2c3d
+# ...
+
+# List recent QA deployments (most recent first)
+git tag -l "deploy-qa-*" --sort=-creatordate | head -10
+
+# List ALL deployment tags with timestamps
+git for-each-ref --sort=-creatordate --format '%(creatordate:short) %(refname:short)' refs/tags/deploy-*
+```
+
+**Understanding tag names**:
+- `deploy-dev-20260112-214435-0015df2`
+  - `deploy` = deployment tag
+  - `dev` = DEV environment (or `qa` for QA)
+  - `20260112` = date (YYYYMMDD = January 12, 2026)
+  - `214435` = time (HHMMSS = 21:44:35 / 9:44:35 PM)
+  - `0015df2` = git commit short SHA
+
+### Step 3: Select the Rollback Target
+
+**Method A: Use the previous tag (most common)**
+```bash
+# Get the last TWO deployments
+git tag -l "deploy-dev-*" --sort=-creatordate | head -2
+
+# Output example:
+# deploy-dev-20260112-214435-0015df2  <- CURRENT (broken)
+# deploy-dev-20260112-201504-0015df2  <- USE THIS for rollback
+```
+
+**Method B: Investigate commit history**
+```bash
+# View what changed in each deployment
+git show deploy-dev-20260112-214435-0015df2  # Current broken deployment
+git show deploy-dev-20260112-201504-0015df2  # Previous deployment
+
+# View commit log between tags
+git log deploy-dev-20260112-201504-0015df2..deploy-dev-20260112-214435-0015df2 --oneline
+
+# Example output:
+# d4dd75e test: Add breaking change to test API for rollback testing
+# ^ This shows what will be rolled back
+
+# View actual file changes
+git diff deploy-dev-20260112-201504-0015df2 deploy-dev-20260112-214435-0015df2 -- apimartifacts/
+```
+
+**Method C: Check workflow runs to find last successful deployment**
+```bash
+# List publisher runs with their status
+gh run list --workflow=run-publisher.yaml --limit 10 --json conclusion,createdAt,headSha
+
+# Find the last successful run BEFORE the problem
+# Note the commit SHA and find its deployment tag
+git tag --contains <commit-sha> | grep deploy-dev
+```
+
+### Step 4: Preview the Rollback (DRY RUN)
+
+**ALWAYS preview before executing** - this shows you exactly what will change.
+
+```bash
+# Run dry-run preview
+gh workflow run rollback-deployment.yaml \
+  -f ENVIRONMENT=apim-bpimb-dev \
+  -f ROLLBACK_TARGET=deploy-dev-20260112-201504-0015df2 \
+  -f DRY_RUN=true
+
+# Wait a few seconds for workflow to start
+sleep 5
+
+# Get the workflow run ID
+gh run list --workflow=rollback-deployment.yaml --limit 1 --json databaseId,status --jq '.[0] | .databaseId'
+
+# View the preview (opens in browser)
+gh run view <run-id> --web
+
+# Or view in terminal
+gh run watch <run-id>
+```
+
+**Review the dry-run output**:
+- ✅ "Commits Being Rolled Back" - shows what commits will be undone
+- ✅ "Files That Will Change" - shows which files will be modified
+- ✅ "APIs Affected" - shows how many APIs will be updated
+- ⚠️ Look for warnings about API specification changes
+
+### Step 5: Execute the Rollback
+
+**After reviewing the preview and confirming it's correct**:
+
+```bash
+# Execute the rollback (NO dry-run flag)
+gh workflow run rollback-deployment.yaml \
+  -f ENVIRONMENT=apim-bpimb-dev \
+  -f ROLLBACK_TARGET=deploy-dev-20260112-201504-0015df2 \
+  -f DRY_RUN=false
+
+# Get the workflow run ID
+sleep 5
+RUN_ID=$(gh run list --workflow=rollback-deployment.yaml --limit 1 --json databaseId --jq '.[0].databaseId')
+echo "Rollback workflow: $RUN_ID"
+
+# Monitor execution in real-time
+gh run watch $RUN_ID
+
+# Or check status periodically
+watch -n 10 "gh run view $RUN_ID"
+```
+
+**For QA rollbacks**: You'll need to approve the deployment manually:
+```bash
+# After workflow starts, go to GitHub Actions UI
+gh run view $RUN_ID --web
+
+# Click "Review deployments" button
+# Select "approve-qa-rollback" environment
+# Click "Approve and deploy"
+```
+
+### Step 6: Verify Rollback Success
+
+**The rollback workflow automatically**:
+- ✅ Triggers the publisher to deploy the rollback target
+- ✅ Runs test suite to verify APIs are working
+- ✅ Creates a new deployment tag (e.g., `deploy-dev-20260112-221500-0015df2`)
+
+**Manual verification steps**:
+
+```bash
+# 1. Check rollback workflow completed successfully
+gh run view $RUN_ID
+
+# 2. Check the publisher workflow triggered by rollback
+gh run list --workflow=run-publisher.yaml --limit 1
+PUBLISHER_RUN=$(gh run list --workflow=run-publisher.yaml --limit 1 --json databaseId --jq '.[0].databaseId')
+gh run view $PUBLISHER_RUN
+
+# 3. Check test results
+gh run list --workflow=test-apis-ephemeral.yaml --limit 1
+TEST_RUN=$(gh run list --workflow=test-apis-ephemeral.yaml --limit 1 --json databaseId --jq '.[0].databaseId')
+gh run view $TEST_RUN
+
+# 4. Verify new deployment tag was created
+git fetch --tags
+git tag -l "deploy-dev-*" --sort=-creatordate | head -3
+# Should show a new tag with the same commit SHA as your rollback target
+
+# 5. Test APIs manually
+curl -H "Ocp-Apim-Subscription-Key: $KEY" https://niaid-bpimb-apim-dev.azure-api.net/your-api
+# Should return expected response (not 500/502/503)
+```
+
+### Step 7: Clean Up Repository (Recommended)
+
+**After successful rollback**, the broken code is still in the main branch. You should remove it:
+
+```bash
+# View recent commits
+git log --oneline -5
+
+# Revert the bad commit(s)
+git revert d4dd75e --no-edit  # Replace with actual bad commit SHA
+git push origin main
+
+# Or if multiple commits need reverting
+git revert <bad-commit-1> <bad-commit-2> --no-edit
+git push origin main
+```
+
+This keeps history clean and prevents the broken code from being redeployed.
+
+---
+
+## 📋 Quick Reference: Finding Your Rollback Target
+
+**Use this decision tree**:
+
+```
+Problem detected in DEV or QA
+    │
+    ├─→ Do you know when the problem started?
+    │   YES → Find deployment tags from before that time
+    │   NO  → Roll back to previous tag (safest)
+    │
+    ├─→ Get tags: git fetch --tags && git tag -l "deploy-{env}-*" --sort=-creatordate | head -10
+    │
+    ├─→ Identify target:
+    │   - First tag = CURRENT (likely broken)
+    │   - Second tag = PREVIOUS (usually your rollback target)
+    │
+    ├─→ Verify target: git show <tag>
+    │   - Check commit message
+    │   - Check date/time
+    │   - Check what files changed
+    │
+    ├─→ Preview: gh workflow run rollback-deployment.yaml -f DRY_RUN=true
+    │
+    ├─→ Review preview output in GitHub Actions
+    │
+    └─→ Execute: gh workflow run rollback-deployment.yaml -f DRY_RUN=false
+```
+
+**Common scenarios**:
+
+| Scenario | Command to Find Rollback Target |
+|----------|----------------------------------|
+| Roll back to previous deployment | `git tag -l "deploy-dev-*" --sort=-creatordate \| head -2 \| tail -1` |
+| Roll back to deployment from yesterday | `git tag -l "deploy-dev-$(date -d yesterday +%Y%m%d)*"` |
+| Roll back to last week | `git tag -l "deploy-dev-*" --sort=-creatordate \| grep "202601(0[5-9]\|1[0-1])"` |
+| Find tag for specific commit | `git tag --contains <commit-sha> \| grep deploy-dev` |
+| Find deployments from specific date | `git tag -l "deploy-dev-20260112*"` |
+
+---
 
 **Usage**:
 
 ```bash
-# List available deployment tags
+# Step 1: List available deployment tags
 git fetch --tags
-git tag -l "deploy-dev-*" | tail -10  # Last 10 DEV deployments
-git tag -l "deploy-qa-*" | tail -10   # Last 10 QA deployments
+git tag -l "deploy-dev-*" --sort=-creatordate | head -10  # Last 10 DEV deployments
+git tag -l "deploy-qa-*" --sort=-creatordate | head -10   # Last 10 QA deployments
 
-# Preview rollback (recommended first step)
+# Step 2: Check tag details
+git show deploy-dev-20260112-214435-0015df2
+# Shows commit message, author, timestamp, and changes
+
+# Step 3: Preview rollback (STRONGLY RECOMMENDED)
 gh workflow run rollback-deployment.yaml \
   -f ENVIRONMENT=apim-bpimb-dev \
-  -f ROLLBACK_TARGET=deploy-dev-20260109-143022-a1b2c3d \
+  -f ROLLBACK_TARGET=deploy-dev-20260112-201504-0015df2 \
   -f DRY_RUN=true
 
-# Execute rollback after reviewing preview
+# View the dry-run results
+gh run list --workflow=rollback-deployment.yaml --limit 1
+gh run view <run-id>  # Review preview in GitHub Actions summary
+
+# Step 4: Execute rollback after reviewing preview
 gh workflow run rollback-deployment.yaml \
   -f ENVIRONMENT=apim-bpimb-dev \
-  -f ROLLBACK_TARGET=deploy-dev-20260109-143022-a1b2c3d \
+  -f ROLLBACK_TARGET=deploy-dev-20260112-201504-0015df2 \
   -f DRY_RUN=false
 
-# Can also rollback to specific commit SHA
+# Monitor rollback execution
+gh run watch <run-id>
+
+# Step 5: Verify rollback success
+gh run list --workflow=test-apis-ephemeral.yaml --limit 1
+gh run view <test-run-id>  # Confirm tests passed
+
+# Can also rollback to specific commit SHA (less common)
 gh workflow run rollback-deployment.yaml \
   -f ENVIRONMENT=apim-bpimb-qa \
-  -f ROLLBACK_TARGET=a1b2c3d4e5f6
+  -f ROLLBACK_TARGET=0015df2318023c0a4c5eca3022cfa119659a5dcb
 ```
 
 **Rollback Process**:
 
-1. **Validate Target**: Confirms tag/commit exists
-2. **Preview Changes**: Shows commits being rolled back and file diffs
-3. **Approval** (QA only): Requires manual approval for QA rollbacks
-4. **Deploy**: Checks out target and runs publisher
-5. **Verify**: Runs full test suite to confirm rollback success
+1. **Validate Target** (`validate-target` job):
+   - Checks if target is a valid tag or commit SHA
+   - Resolves tag to commit SHA
+   - Displays commit details in workflow summary
+   - Outputs: `target-sha`, `target-type`, `target-ref`
+   - Duration: ~3-5 seconds
+
+2. **Preview Changes** (`preview-changes` job):
+   - Shows commits being rolled back (`git log --oneline TARGET..CURRENT`)
+   - File diff statistics (`git diff --stat CURRENT TARGET`)
+   - Counts affected APIs (files in `apimartifacts/apis/`)
+   - Lists specific API changes
+   - Checks for API specification changes (potential breaking changes)
+   - Duration: ~3-5 seconds
+
+3. **Dry-Run Summary** (`dry-run-summary` job - only if DRY_RUN=true):
+   - Displays preview summary
+   - Shows exact command to execute actual rollback
+   - **No deployment occurs**
+   - Duration: ~3 seconds
+
+4. **Approval** (`approve-qa-rollback` - QA only):
+   - Required for QA environment rollbacks
+   - DEV environment rollbacks execute immediately (no approval)
+   - Uses GitHub environment protection rules
+   - Duration: Manual approval time
+
+5. **Execute Rollback** (`execute-rollback` job - only if DRY_RUN=false):
+   - Checks out rollback target (tag or commit)
+   - Determines configuration file (dev/qa)
+   - Triggers publisher workflow using tag ref
+   - Publisher workflow deploys from rollback target commit
+   - Waits for publisher workflow to complete
+   - Duration: ~6-8 minutes (includes publisher execution)
+
+6. **Verify Rollback** (`verify-rollback` job):
+   - Waits for rollback deployment to complete
+   - Confirms new deployment tag created
+   - Checks post-rollback test results
+   - Displays rollback success summary
+   - Duration: Included in step 5
+
+**Workflow Architecture**:
+
+```mermaid
+graph TB
+    Start[Manual Trigger] --> Validate[Validate Target<br/>3-5s]
+    Validate --> Preview[Preview Changes<br/>3-5s]
+    Preview --> DryRun{DRY_RUN?}
+    
+    DryRun -->|true| Summary[Dry-Run Summary<br/>Display Only]
+    Summary --> End1[End - No Deployment]
+    
+    DryRun -->|false| EnvCheck{Environment?}
+    EnvCheck -->|QA| Approval[Approval Gate<br/>Manual]
+    EnvCheck -->|DEV| Execute
+    Approval --> Execute[Execute Rollback<br/>Trigger Publisher]
+    
+    Execute --> Publisher[Publisher Workflow<br/>Deploys from Target]
+    Publisher --> Tests[Run Test Suite<br/>3-4 minutes]
+    Tests --> Tag[Create New Tag<br/>deploy-env-timestamp-sha]
+    Tag --> Verify[Verify Success]
+    Verify --> End2[End - Rollback Complete]
+```
 
 **When to Use**:
 
-| Scenario | Recommended Approach | RTO |
-|----------|---------------------|-----|
-| Recent deployment issue in DEV | Rollback workflow with tag | <5 min |
-| Recent deployment issue in QA | Rollback workflow with tag | <10 min |
-| Need to undo multiple commits | Rollback workflow to specific tag | <10 min |
-| Emergency (workflow unavailable) | Manual git revert + push | <5 min |
-| Testing rollback procedure | Use DRY_RUN=true | N/A |
+| Scenario | Recommended Approach | Recovery Time | Approval Required |
+|----------|---------------------|---------------|-------------------|
+| Recent deployment issue in DEV | Rollback workflow with tag | ~6 minutes | No |
+| Recent deployment issue in QA | Rollback workflow with tag | ~10 minutes | Yes (manual) |
+| Breaking change detected in tests | Rollback workflow to last good tag | ~6-10 minutes | QA only |
+| Need to undo multiple commits | Rollback workflow to specific tag | ~6-10 minutes | QA only |
+| Policy breaking production APIs | Rollback workflow (highest priority) | ~6-10 minutes | QA only |
+| Testing rollback procedure | Use DRY_RUN=true | ~15 seconds | No |
+| Emergency (workflow unavailable) | Manual git revert + push | ~5-15 minutes | Via PR approval |
+
+**Recovery Time Objectives (RTO)**:
+
+| Environment | Dry-Run Preview | Actual Rollback | Total (with preview) |
+|-------------|----------------|-----------------|----------------------|
+| DEV | ~15 seconds | ~6 minutes | ~6.5 minutes |
+| QA | ~15 seconds | ~10 minutes | ~10.5 minutes |
 
 **Emergency Manual Rollback**:
 
-If GitHub Actions is unavailable:
+If GitHub Actions is unavailable or experiencing issues:
 
 ```bash
-# Option 1: Revert specific commit
-git revert <bad-commit-sha>
+# Option 1: Revert specific commit (RECOMMENDED - preserves history)
+git revert <bad-commit-sha> --no-edit
 git push origin main
-# Auto-triggers publisher workflow
+# Auto-triggers publisher workflow when Actions is back online
 
-# Option 2: Hard reset to previous commit (DESTRUCTIVE)
+# Option 2: Revert to specific tag (reverses all commits since tag)
+git revert <tag>..HEAD --no-edit
+git push origin main
+
+# Option 3: Hard reset to previous commit (DESTRUCTIVE - rewrites history)
+# ⚠️ WARNING: Only use in emergencies, requires force push
 git reset --hard <good-commit-sha>
 git push --force origin main
-# Auto-triggers publisher workflow
+# Requires force push permissions, may break other developers' work
+
+# Option 4: Create hotfix branch and PR
+git checkout -b hotfix/rollback-to-<tag>
+git reset --hard <good-tag>
+git push origin hotfix/rollback-to-<tag>
+gh pr create --title "Emergency Rollback" --body "Rollback to <tag>"
+# Requires PR approval, safest but slowest option
 ```
 
 **Safety Features**:
 
-- ✅ Dry run preview before execution
-- ✅ Automatic detection of API specification changes
-- ✅ Warning for potential breaking changes
-- ✅ Approval required for QA rollbacks
-- ✅ Post-rollback verification tests
-- ✅ Audit trail via git tags and workflow logs
+- ✅ **Dry run preview** before execution shows:
+  - Commits being rolled back
+  - Files that will change
+  - Number of APIs affected
+  - API specification changes (potential breaking changes)
+- ✅ **Automatic validation** ensures rollback target exists
+- ✅ **Warning annotations** for API specification changes
+- ✅ **Approval required** for QA rollbacks (DEV auto-executes)
+- ✅ **Post-rollback verification** tests confirm successful recovery
+- ✅ **Audit trail** via git tags, workflow logs, and deployment records
+- ✅ **New deployment tag** created after successful rollback for future reference
+- ✅ **Idempotent** - can re-run rollback if it fails
+
+**Troubleshooting**:
+
+**Issue**: "could not create workflow dispatch event: HTTP 403"
+- **Cause**: Workflow lacks permissions to trigger publisher workflow
+- **Solution**: Ensure `permissions: actions: write` is set in rollback workflow (fixed in commit 8056a31)
+
+**Issue**: "No ref found for: <commit-sha>"
+- **Cause**: Cannot trigger workflows with bare commit SHAs, need tag/branch ref
+- **Solution**: Use deployment tags instead of commit SHAs, or ensure tag ref is used (fixed in commit 4dd542c)
+
+**Issue**: "Rollback target not found"
+- **Cause**: Tag or commit doesn't exist in repository
+- **Solution**: Run `git fetch --tags` to sync tags, verify target exists with `git show <target>`
+
+**Issue**: "Rollback succeeded but tests still failing"
+- **Cause**: Issue may be in infrastructure or external dependencies, not code
+- **Solution**: Check APIM service health, Key Vault access, backend service availability
+
+**Issue**: "Rollback shows no changes"
+- **Cause**: Already at the target state
+- **Solution**: Verify current deployment tag matches rollback target - no action needed
+
+**Issue**: "Publisher workflow triggered but stuck at approval"
+- **Cause**: Rollback triggers publisher on tag ref, which still requires approval gates
+- **Solution**: Approve the deployment in GitHub Actions UI, or use emergency manual rollback
+
+**Known Limitations**:
+
+1. **Tag-based rollbacks only**: Cannot trigger workflows with bare commit SHAs - must use tags
+   - Workaround: All successful deployments create tags automatically
+   
+2. **Requires approval for QA**: Even emergency QA rollbacks need manual approval
+   - Workaround: Use manual git revert + push for true emergency bypass
+   
+3. **No automatic rollback**: Workflow must be manually triggered
+   - Future enhancement: Auto-rollback on test failure threshold
+   
+4. **Rollback affects repository state**: Rolling back in Azure doesn't automatically update main branch
+   - Best practice: After successful rollback, revert breaking commits from main branch
+   
+5. **Test framework limitations**: Current tests only check gateway reachability (accept HTTP 404/401/403/200)
+   - Impact: Policy-level breaking changes may not be caught by tests
+   - Recommendation: Add operation-level testing to detect 5xx errors
+
+**Best Practices**:
+
+1. **Always run dry-run first**: Preview changes before executing actual rollback
+2. **Use deployment tags**: Prefer tags over commit SHAs for clarity and traceability
+3. **Document rollback reason**: Add comment in workflow run explaining why rollback was needed
+4. **Clean up main branch**: After successful rollback, revert breaking commits from main
+5. **Test after rollback**: Manually verify API functionality beyond automated tests
+6. **Monitor post-rollback**: Check APIM logs and metrics for 1-2 hours after rollback
+7. **Update runbooks**: Document what went wrong and how rollback helped
+8. **Consider progressive deployment**: Use QA as canary before production deployments
 
 ---
 
