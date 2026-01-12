@@ -111,7 +111,7 @@ jobs:
   # Tag successful DEV deployment for rollback capability
   Tag-DEV-Deployment:
     needs: [get-commit, Test-DEV-After-Deploy]
-    if: needs.Test-DEV-After-Deploy.result == 'success'
+    if: always() && needs.Test-DEV-After-Deploy.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -315,7 +315,7 @@ jobs:
   # Tag successful QA deployment for rollback capability
   Tag-QA-Deployment:
     needs: [get-commit, Test-QA-After-Deploy]
-    if: needs.Test-QA-After-Deploy.result == 'success'
+    if: always() && needs.Test-QA-After-Deploy.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
