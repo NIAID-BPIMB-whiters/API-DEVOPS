@@ -81,41 +81,239 @@ Create `niaid-bpimb-apim-sb` as a sandbox environment mirroring DEV architecture
 - [ ] Update architecture diagrams
 - [ ] Document sandbox use cases and policies
 
-### Promotion Path: Sandbox → DEV
+### Promotion Path: Sandbox → DEV (Manual Process)
 
-**Strategy Options**:
+**Use Case**: Successfully tested POC in Sandbox needs to be promoted to DEV environment.
 
-1. **Manual Cherry-Pick** (Recommended for POCs)
-   ```bash
-   # Test in sandbox
-   git checkout -b poc/feature-name
-   # ... make changes ...
-   # Deploy to sandbox, test
+**Important**: This is a **manual, selective process** - not all sandbox changes should be promoted. Only successful, tested POCs should move to DEV.
+
+---
+
+#### Method 1: Manual File Copy (Recommended for Simple Changes)
+
+**Best for**: Single API changes, policy updates, simple configuration changes
+
+**Steps**:
+
+1. **Export API configuration from Sandbox APIM**
+   ```powershell
+   # Login to Azure
+   az login
+   az account set --subscription <subscription-id>
    
-   # Promote to DEV via PR
-   git checkout main
-   git cherry-pick <sandbox-commit>
-   # Auto-deploys to DEV via publisher
+   # Export specific API from Sandbox
+   az apim api export `
+     --resource-group niaid-bpimb-apim-sb-rg `
+     --service-name niaid-bpimb-apim-sb `
+     --api-id <api-id> `
+     --export-format OpenApiJson `
+     --file-path ./sandbox-export/<api-name>.json
+   
+   # Export API policy
+   az apim api policy show `
+     --resource-group niaid-bpimb-apim-sb-rg `
+     --service-name niaid-bpimb-apim-sb `
+     --api-id <api-id> `
+     --output xml > ./sandbox-export/<api-name>-policy.xml
    ```
 
-2. **Extractor-Based** (For complex changes)
+2. **Review and update configuration files in repository**
    ```bash
-   # Extract from sandbox APIM
-   gh workflow run run-extractor.yaml -f SOURCE_ENVIRONMENT=apim-bpimb-sb
-   # Creates PR with sandbox changes
-   # Review and merge to promote to DEV
+   # Create feature branch
+   git checkout -b feature/sandbox-poc-<feature-name>
+   
+   # Manually update files in apimartifacts/apis/<api-name>/
+   # - Update specification.yaml with exported OpenAPI spec
+   # - Update policy.xml with exported policy
+   # - Update apiInformation.json if needed
+   
+   # Update for DEV environment specifics
+   # - Change backend URLs if needed
+   # - Update named values references
+   # - Adjust environment-specific settings
    ```
 
-3. **Branch-Based** (For coordinated releases)
+3. **Test in local/preview mode**
    ```bash
-   # Develop on sandbox branch
-   git checkout -b sandbox/release-v2
-   # Deploy to sandbox environment only
+   # Validate OpenAPI spec
+   npx @stoplight/spectral-cli lint apimartifacts/apis/<api-name>/specification.yaml
    
-   # Promote to DEV when ready
-   git checkout main
-   git merge sandbox/release-v2
-   # Auto-deploys to DEV
+   # Validate policy syntax (manual review)
+   # Check for sandbox-specific values that need to change
+   ```
+
+4. **Create PR and deploy to DEV**
+   ```bash
+   git add apimartifacts/
+   git commit -m "feat: Promote <feature-name> POC from Sandbox to DEV"
+   git push origin feature/sandbox-poc-<feature-name>
+   
+   # Create PR
+   gh pr create --title "Promote <feature-name> from Sandbox" \
+     --body "Successfully tested POC in Sandbox. Ready for DEV deployment."
+   
+   # After PR approval, merge triggers auto-deployment to DEV
+   ```
+
+---
+
+#### Method 2: Azure Portal Manual Configuration (For Complex Changes)
+
+**Best for**: Complex configurations, multiple related resources, policies with dependencies
+
+**Steps**:
+
+1. **Document Sandbox Configuration**
+   - Screenshot or document all settings in Sandbox APIM portal
+   - Note API operations, policies, products, subscriptions
+   - Document backend services, named values, certificates
+
+2. **Manually Recreate in DEV APIM Portal**
+   - Login to Azure Portal → Navigate to niaid-bpimb-apim-dev
+   - Recreate API with same operations
+   - Copy/paste policies (update environment-specific values)
+   - Configure products, subscriptions, etc.
+
+3. **Extract DEV to Sync Repository**
+   ```bash
+   # After manual changes in DEV, extract to capture them
+   gh workflow run run-extractor.yaml \
+     -f SOURCE_ENVIRONMENT=apim-bpimb-dev \
+     -f CONFIGURATION_YAML_PATH="Extract All APIs"
+   
+   # Review and merge the extraction PR
+   # This ensures Git repo stays in sync with DEV
+   ```
+
+---
+
+#### Method 3: Extractor-Based (For Full Environment Sync)
+
+**Best for**: Multiple APIs, comprehensive POC with many resources, testing extraction workflow
+
+**Steps**:
+
+1. **Run Extractor from Sandbox**
+   ```bash
+   gh workflow run run-extractor.yaml \
+     -f SOURCE_ENVIRONMENT=apim-bpimb-sb \
+     -f CONFIGURATION_YAML_PATH="Extract All APIs"
+   ```
+
+2. **Review Extraction PR Carefully**
+   - Check all files in the PR
+   - **Remove any Sandbox-only configs** that shouldn't go to DEV
+   - **Update environment-specific values**:
+     - Backend URLs
+     - Named values
+     - Key Vault references
+     - Resource IDs
+
+3. **Selective Promotion**
+   ```bash
+   # Checkout extraction PR branch
+   gh pr checkout <pr-number>
+   
+   # Manually remove unwanted files
+   git rm apimartifacts/apis/<sandbox-only-api>/
+   
+   # Edit files to change sandbox-specific values
+   # Update configuration.dev.yaml references
+   
+   # Commit selective changes
+   git add -A
+   git commit -m "refactor: Keep only <feature> from sandbox extraction"
+   git push
+   
+   # Merge PR to deploy to DEV
+   ```
+
+---
+
+#### Method 4: Infrastructure as Code (For Repeatable Deployments)
+
+**Best for**: Standardized POC promotion, automation, repeatable process
+
+**Steps**:
+
+1. **Create Deployment Script**
+   ```powershell
+   # scripts/promote-sandbox-to-dev.ps1
+   param(
+       [string]$ApiId,
+       [string]$ApiName
+   )
+   
+   # Export from Sandbox
+   az apim api export --resource-group niaid-bpimb-apim-sb-rg `
+     --service-name niaid-bpimb-apim-sb --api-id $ApiId `
+     --file-path "./temp/$ApiName.json"
+   
+   # Transform for DEV environment
+   # (Add transformation logic here)
+   
+   # Update repository files
+   Copy-Item "./temp/$ApiName.json" `
+     "apimartifacts/apis/$ApiName/specification.yaml"
+   
+   # Commit and push
+   git checkout -b "feature/promote-$ApiName"
+   git add apimartifacts/apis/$ApiName/
+   git commit -m "feat: Promote $ApiName from Sandbox"
+   git push origin "feature/promote-$ApiName"
+   ```
+
+2. **Run Script**
+   ```powershell
+   .\scripts\promote-sandbox-to-dev.ps1 -ApiId "test-api" -ApiName "test"
+   ```
+
+---
+
+### Promotion Checklist
+
+Before promoting from Sandbox to DEV, ensure:
+
+- [ ] POC fully tested in Sandbox environment
+- [ ] All Sandbox-specific configurations identified
+- [ ] Environment-specific values updated for DEV:
+  - [ ] Backend service URLs
+  - [ ] Named values / environment variables
+  - [ ] Key Vault secret references
+  - [ ] Subscription keys
+  - [ ] OAuth/AAD settings
+- [ ] API policies reviewed and updated
+- [ ] Breaking changes documented
+- [ ] Team notified of upcoming DEV deployment
+- [ ] Rollback plan identified (previous DEV deployment tag)
+
+### Post-Promotion Validation
+
+After promoting to DEV:
+
+1. **Run DEV Tests**
+   ```bash
+   gh run list --workflow=test-apis-ephemeral.yaml --limit 1
+   gh run view <run-id>
+   ```
+
+2. **Verify API Functionality**
+   ```bash
+   # Test API endpoint
+   curl -H "Ocp-Apim-Subscription-Key: $DEV_KEY" \
+     https://niaid-bpimb-apim-dev.azure-api.net/<api-path>
+   ```
+
+3. **Monitor for Issues**
+   - Check Application Insights for errors
+   - Review APIM analytics
+   - Test from consumer perspective
+
+4. **Extract from DEV (Optional)**
+   ```bash
+   # If changes were made directly in portal, extract to sync repo
+   gh workflow run run-extractor.yaml \
+     -f SOURCE_ENVIRONMENT=apim-bpimb-dev
    ```
 
 ### Testing Strategy
@@ -130,108 +328,117 @@ Create `niaid-bpimb-apim-sb` as a sandbox environment mirroring DEV architecture
 ## 🔄 Initiative 2: Change Extractor Source to DEV
 
 ### Objective
-Make `niaid-bpimb-apim-dev` the primary source for extraction workflow, while keeping `apim-daids-connect` available. Optionally support sandbox-to-DEV promotion via extraction.
+Make `niaid-bpimb-apim-dev` the primary source for extraction workflow (DEV → QA → PROD pipeline), while keeping `apim-daids-connect` available for legacy extraction.
 
 ### Current State
 - **Extractor Source**: `apim-daids-connect` (DAIDS DEV)
 - **Deployment Targets**: DEV, QA
 - **Flow**: DAIDS → Git → DEV/QA
 
-### Target State - Option A (Recommended)
-- **Extractor Source**: `niaid-bpimb-apim-dev` (BPIMB DEV)
-- **Deployment Targets**: QA, Sandbox
-- **Flow**: DEV → Git → QA/Sandbox
-- **Use Case**: DEV is production-like, QA mirrors it, Sandbox for experiments
+### Target State ✅ **DECISION MADE**
+- **Primary Flow (Automated)**: `DEV → Git → QA → PROD`
+  - **Extractor Source**: `niaid-bpimb-apim-dev` (BPIMB DEV)
+  - **Deployment Targets**: QA, PROD
+  - **Process**: Extract from DEV → PR → Merge → Auto-deploy to QA → Approve → Deploy to PROD
+  
+- **Sandbox Flow (Manual Promotion)**: `Sandbox → DEV`
+  - **Purpose**: POC development and experimentation
+  - **Process**: Manual steps to promote successful POCs from Sandbox to DEV (documented below)
+  - **NOT extraction-based**: Sandbox does not feed into automated extraction workflow
 
-### Target State - Option B (Alternative)
-- **Extractor Source**: `niaid-bpimb-apim-sb` (BPIMB Sandbox)
-- **Deployment Targets**: DEV, QA
-- **Flow**: Sandbox → Git → DEV → QA
-- **Use Case**: All changes start in Sandbox, promoted to DEV via extraction, then QA
-
-**Decision Required**: Choose Option A or Option B based on workflow preferences.
+- **Legacy Flow (On-Demand)**: `DAIDS → Git`
+  - **Extractor Source**: `apim-daids-connect` (DAIDS DEV)
+  - **Process**: Manual extraction for reference/comparison
+  - **Use Case**: Audit, drift detection, legacy API reference
 
 ### Rationale
 
-**Option A (DEV as Source)**:
-- ✅ DEV becomes the "source of truth" for API configurations
-- ✅ Sandbox can be used for experimentation without affecting version control
-- ✅ QA mirrors DEV configuration (current behavior)
-- ✅ Simpler promotion path (manual cherry-pick or PR)
-- ⚠️ Sandbox changes must be manually promoted
+**Why DEV as Primary Extractor Source**:
+- ✅ DEV becomes the "source of truth" for production-bound configurations
+- ✅ QA mirrors DEV (validation environment)
+- ✅ PROD mirrors QA (production deployment)
+- ✅ Clear promotion path: DEV → QA → PROD
+- ✅ Extraction workflow aligns with deployment pipeline
+- ✅ Simpler to understand and maintain
 
-**Option B (Sandbox as Source)**:
-- ✅ All changes start in Sandbox (isolated development)
-- ✅ Automated promotion via extraction workflow
-- ✅ Git always reflects what's deployed to Sandbox first
-- ⚠️ More complex workflow
-- ⚠️ DEV becomes a deployment target instead of source of truth
+**Why Sandbox Uses Manual Promotion (Not Extraction)**:
+- ✅ Sandbox is for experimentation and POCs
+- ✅ Not all sandbox changes should be promoted
+- ✅ Manual review ensures only successful POCs move to DEV
+- ✅ Keeps extraction workflow focused on DEV → QA → PROD pipeline
+- ✅ Prevents accidental promotion of experimental/broken configs
+- ✅ Allows selective feature promotion
 
-**Both Options**:
-- DAIDS remains available for legacy extraction if needed
-- Can switch between options as needed
+**Why Keep DAIDS Extraction Available**:
+- ✅ Historical reference for existing DAIDS APIs
+- ✅ Drift detection between DAIDS and BPIMB environments
+- ✅ Legacy API documentation
+- ✅ Comparison/audit purposes
 
 ### Changes Required
 
 #### Workflow Updates
 - [ ] Update `run-extractor.yaml`:
-  - **Option A**: Change default environment from `apim-daids-connect` to `apim-bpimb-dev`
-  - **Option B**: Change default environment from `apim-daids-connect` to `apim-bpimb-sb`
+  - Change default environment from `apim-daids-connect` to `apim-bpimb-dev`
   - Add all three as environment choices: `apim-daids-connect`, `apim-bpimb-dev`, `apim-bpimb-sb`
-  - Update documentation in workflow to explain when to use each source
+  - Update documentation in workflow:
+    - `apim-bpimb-dev` (default): For DEV → QA → PROD pipeline
+    - `apim-bpimb-sb`: For troubleshooting/comparing sandbox state (manual promotion to DEV)
+    - `apim-daids-connect`: For legacy extraction and drift detection
 
 #### Configuration Updates
 - [ ] Review `configuration.extractor.yaml`:
-  - Verify it works with DEV as source (Option A)
-  - Verify it works with Sandbox as source (Option B)
-  - Update API filters if needed
+  - Verify it works with DEV as default source
+  - Update API filters if needed for DEV environment
   - Ensure named values are extracted correctly
-  - Consider creating separate extractor configs:
-    - `configuration.extractor.dev.yaml` (for Option A)
-    - `configuration.extractor.sandbox.yaml` (for Option B)
+  - Test extraction from Sandbox (optional, for comparison)
 
 #### Documentation Updates
 - [ ] Update README.md:
-  - Document chosen extractor flow (Option A or B)
+  - Document extractor flow: DEV → QA → PROD (automated)
+  - Document Sandbox → DEV promotion (manual, documented above)
   - Document when to use each extractor source:
-    - Sandbox: For promoting experimental features
-    - DEV: For capturing production-like state
-    - DAIDS: For legacy/reference extraction
-  - Update architecture diagrams with chosen flow
+    - DEV (default): For DEV → QA → PROD pipeline
+    - Sandbox: For troubleshooting, comparison (not for promotion)
+    - DAIDS: For legacy/reference extraction, drift detection
+  - Update architecture diagrams with DEV as primary source
   - Update Quick Start guide with new extraction workflow
+  - Add Sandbox → DEV manual promotion guide to README
 
 #### Testing
-- [ ] **Option A**: Run extraction from DEV: `gh workflow run run-extractor.yaml -f SOURCE_ENVIRONMENT=apim-bpimb-dev`
-- [ ] **Option B**: Run extraction from Sandbox: `gh workflow run run-extractor.yaml -f SOURCE_ENVIRONMENT=apim-bpimb-sb`
+- [ ] Run extraction from DEV: `gh workflow run run-extractor.yaml -f SOURCE_ENVIRONMENT=apim-bpimb-dev`
 - [ ] Verify PR created with correct changes
-- [ ] Compare with previous DAIDS extractions
-- [ ] Ensure no regressions in downstream deployments (QA for Option A, DEV/QA for Option B)
+- [ ] Compare with previous DAIDS extractions to detect drift
+- [ ] Ensure no regressions in QA deployment
+- [ ] Test Sandbox extraction (optional): `gh workflow run run-extractor.yaml -f SOURCE_ENVIRONMENT=apim-bpimb-sb`
 
 ### Migration Plan
 
-**Phase 1: Preparation** (Day 1)
-1. **DECISION POINT**: Choose Option A (DEV as source) or Option B (Sandbox as source)
+**Phase 1: Preparation** (Day 1-2)
+1. ✅ **DECISION CONFIRMED**: DEV as primary extractor source
 2. Run final extraction from DAIDS to capture current state
-3. Merge DAIDS extraction PR
+3. Merge DAIDS extraction PR if changes exist
 4. Tag current state: `pre-extractor-migration`
 
-**Phase 2: Switch** (Day 1)
-1. Update `run-extractor.yaml` to use chosen source as default (DEV or Sandbox)
-2. Add all three environments as choices in workflow
-3. Update documentation to reflect chosen flow
+**Phase 2: Switch** (Day 2)
+1. Update `run-extractor.yaml` to use DEV as default source
+2. Keep all three environments as choices (DEV, Sandbox, DAIDS)
+3. Update documentation to reflect new flow
 4. Commit and push changes
 
-**Phase 3: Validation** (Day 1)
-1. Run extraction from chosen source (DEV or Sandbox)
+**Phase 3: Validation** (Day 2-3)
+1. Run extraction from DEV: `gh workflow run run-extractor.yaml`
 2. Review differences from DAIDS baseline
-3. Merge if changes are expected
-4. Monitor deployments to downstream environments
+3. Merge if changes are expected (environment-specific differences)
+4. Monitor QA deployment after merge
+5. Verify QA mirrors DEV correctly
 
-**Phase 4: Ongoing** (Week 1)
-- **Option A**: Run weekly extractions from DEV, monitor QA deployments
-- **Option B**: Run extractions from Sandbox after completing POCs, monitor DEV/QA deployments
-- Compare with DAIDS occasionally to detect drift
-- Document any discrepancies
+**Phase 4: Ongoing** (Week 1+)
+- Run weekly scheduled extractions from DEV
+- Monitor QA and PROD deployments
+- Occasionally extract from DAIDS for drift detection
+- Document Sandbox → DEV promotions in PR descriptions
+- Extract from Sandbox only for troubleshooting/comparison
 
 ### Rollback Plan
 If new extraction source causes issues:
@@ -506,11 +713,11 @@ Create `niaid-bpimb-apim-prod` in production subscription to support production 
    - [ ] Who approves sandbox deployments?
 
 2. **Extractor**:
-   - [ ] **CRITICAL**: Choose Option A (DEV as source) or Option B (Sandbox as source)?
-   - [ ] If Option A: How often should we extract from DEV? (weekly/on-demand?)
-   - [ ] If Option B: Should extraction be automatic after Sandbox changes or manual?
-   - [ ] Should we maintain scheduled extractions from DAIDS for comparison/audit?
-   - [ ] Do we need separate extractor configuration files for each source?
+   - [x] **DECISION MADE**: DEV as primary extractor source for DEV → QA → PROD pipeline
+   - [ ] How often should we extract from DEV? (weekly/on-demand/both?)
+   - [ ] Should we schedule automatic weekly extractions from DEV?
+   - [ ] Should we maintain periodic extractions from DAIDS for comparison/audit?
+   - [ ] Create promotion script template for Sandbox → DEV?
 
 3. **Production**:
    - [ ] What is the timeline for decommissioning existing NIAID-APIM-Prod?
