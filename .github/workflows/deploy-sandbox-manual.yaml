@@ -12,6 +12,9 @@ on:
           - "publish-artifacts-in-last-commit"
           - "publish-all-artifacts-in-repo"
 
+env:
+  apiops_release_version: v6.0.2
+
 jobs:
   deploy-to-sandbox:
     runs-on: ubuntu-latest
@@ -31,29 +34,39 @@ jobs:
 
       - name: Run publisher with commit ID
         if: github.event.inputs.COMMIT_ID_CHOICE == 'publish-artifacts-in-last-commit'
-        uses: Azure/apim-publisher@main
-        with:
-          COMMIT_ID: ${{ github.sha }}
-          CONFIGURATION_FILE_PATH: configuration.sandbox.yaml
-          RESOURCE_GROUP_NAME: niaid-bpimb-apim-dev-rg
-          API_MANAGEMENT_SERVICE_NAME: niaid-bpimb-apim-sb
-          API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts
         env:
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: ${{ github.workspace }}/apimartifacts
+          CONFIGURATION_YAML_PATH: ${{ github.workspace }}/configuration.sandbox.yaml
+          COMMIT_ID: ${{ github.sha }}
+        run: |
+          set -e
+          echo "Downloading publisher..."
+          wget -O publisher.zip https://github.com/Azure/apiops/releases/download/${{ env.apiops_release_version }}/publisher-linux-x64.zip
+          unzip publisher.zip
+          chmod +x ./publisher
+          echo "Running publisher with commit ID..."
+          ./publisher
+        shell: bash
 
       - name: Run publisher without commit ID (all artifacts)
         if: github.event.inputs.COMMIT_ID_CHOICE == 'publish-all-artifacts-in-repo'
-        uses: Azure/apim-publisher@main
-        with:
-          CONFIGURATION_FILE_PATH: configuration.sandbox.yaml
-          RESOURCE_GROUP_NAME: niaid-bpimb-apim-dev-rg
-          API_MANAGEMENT_SERVICE_NAME: niaid-bpimb-apim-sb
-          API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts
         env:
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: ${{ github.workspace }}/apimartifacts
+          CONFIGURATION_YAML_PATH: ${{ github.workspace }}/configuration.sandbox.yaml
+        run: |
+          set -e
+          echo "Downloading publisher..."
+          wget -O publisher.zip https://github.com/Azure/apiops/releases/download/${{ env.apiops_release_version }}/publisher-linux-x64.zip
+          unzip publisher.zip
+          chmod +x ./publisher
+          echo "Running publisher (all artifacts)..."
+          ./publisher
+        shell: bash
