@@ -66,6 +66,7 @@ This repository manages four APIM instances with six GitHub environments (four c
 | GitHub Environment | Purpose | APIM Service | Resource Group | Network |
 |-------------------|---------|--------------|----------------|---------|
 | **apim-daids-connect** | Extractor source | niaid-daids-connect-apim | nih-niaid-azurestrides-dev-rg-apim-az | Internal VNet |
+| **apim-bpimb-sb** | Sandbox/POC development | niaid-bpimb-apim-sb | niaid-bpimb-apim-sb-rg | Internal VNet |
 | **apim-bpimb-dev** | DEV deployment target | niaid-bpimb-apim-dev | nih-niaid-azurestrides-dev-rg-apim-az | Internal VNet |
 | **apim-bpimb-qa** | QA deployment target | niaid-bpimb-apim-qa | nih-niaid-azurestrides-dev-rg-apim-az | Internal VNet |
 | **approve-apim-bpimb-dev** | DEV approval gate | N/A - approval only | N/A | N/A |
@@ -73,6 +74,7 @@ This repository manages four APIM instances with six GitHub environments (four c
 
 **Environment Secrets** (stored in GitHub environment settings):
 - **apim-daids-connect**: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME` (niaid-daids-connect-apim)
+- **apim-bpimb-sb**: `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP_NAME` (niaid-bpimb-apim-sb-rg), `API_MANAGEMENT_SERVICE_NAME` (niaid-bpimb-apim-sb)
 - **apim-bpimb-dev**: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME` (niaid-bpimb-apim-dev), `APIM_SUBSCRIPTION_KEY`
 - **apim-bpimb-qa**: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME` (niaid-bpimb-apim-qa), `APIM_SUBSCRIPTION_KEY`
 
