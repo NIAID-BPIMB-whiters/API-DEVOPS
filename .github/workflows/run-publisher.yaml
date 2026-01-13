@@ -17,14 +17,6 @@ on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
     inputs:
-      TARGET_ENVIRONMENT:
-        description: 'Target environment for deployment'
-        required: true
-        type: choice
-        default: "dev-and-qa"
-        options:
-          - "dev-and-qa"
-          - "sandbox-only"
       COMMIT_ID_CHOICE:
         description: 'Choose "publish-all-artifacts-in-repo" only when you want to force republishing all artifacts (e.g. after build failure). Otherwise stick with the default behavior of "publish-artifacts-in-last-commit"'
         required: true
@@ -37,7 +29,7 @@ on:
 jobs:
   # Manual approval gate before DEV deployment
   approve-dev-deployment:
-    if: github.event_name == 'push' || github.event.inputs.TARGET_ENVIRONMENT == 'dev-and-qa'
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     environment: 
       name: approve-apim-bpimb-dev  # Create this environment with required reviewers
@@ -49,9 +41,6 @@ jobs:
     needs: [approve-dev-deployment]
     if: |
       always() && 
-      (github.event_name == 'push' || 
-       github.event.inputs.TARGET_ENVIRONMENT == 'dev-and-qa' ||
-       github.event.inputs.TARGET_ENVIRONMENT == 'sandbox-only') &&
       (needs.approve-dev-deployment.result == 'success' || needs.approve-dev-deployment.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
@@ -62,33 +51,10 @@ jobs:
     outputs:
       commit_id: ${{ steps.commit.outputs.commit_id }}
 
-  #Deploy to Sandbox with Commit ID (manual deployments only)
-  Deploy-To-Sandbox-With-Commit-ID:
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.TARGET_ENVIRONMENT == 'sandbox-only' && github.event.inputs.COMMIT_ID_CHOICE == 'publish-artifacts-in-last-commit'
-    needs: get-commit
-    uses: ./.github/workflows/run-publisher-with-env.yaml
-    with:
-      API_MANAGEMENT_ENVIRONMENT: apim-bpimb-sb # Deploys to Sandbox APIM service (niaid-bpimb-apim-sb)
-      COMMIT_ID: ${{ needs.get-commit.outputs.commit_id }}
-      CONFIGURATION_YAML_PATH: configuration.sandbox.yaml # Sandbox deployment configuration
-      API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts
-    secrets: inherit
-
-  #Deploy to Sandbox without Commit ID (full redeployment)
-  Deploy-To-Sandbox-Without-Commit-ID:
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.TARGET_ENVIRONMENT == 'sandbox-only' && github.event.inputs.COMMIT_ID_CHOICE == 'publish-all-artifacts-in-repo'
-    needs: get-commit
-    uses: ./.github/workflows/run-publisher-with-env.yaml
-    with:
-      API_MANAGEMENT_ENVIRONMENT: apim-bpimb-sb # Deploys to Sandbox APIM service (niaid-bpimb-apim-sb)
-      CONFIGURATION_YAML_PATH: configuration.sandbox.yaml # Sandbox deployment configuration
-      API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts
-    secrets: inherit
-
   #Deploy to DEV with Commit ID (only changed artifacts from last commit)
   # Pipeline: DAIDS_DEV → Repository → DEV → QA
   Deploy-To-DEV-With-Commit-ID:
-    if: (github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.event.inputs.TARGET_ENVIRONMENT == 'dev-and-qa' && github.event.inputs.COMMIT_ID_CHOICE == 'publish-artifacts-in-last-commit')
+    if: (github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.event.inputs.COMMIT_ID_CHOICE == 'publish-artifacts-in-last-commit')
     needs: get-commit
     uses: ./.github/workflows/run-publisher-with-env.yaml
     with:
@@ -101,7 +67,7 @@ jobs:
   #Deploy to DEV without Commit ID (all artifacts in repo)
   # Use this option for full redeployment of all artifacts to DEV
   Deploy-To-DEV-Without-Commit-ID:
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.TARGET_ENVIRONMENT == 'dev-and-qa' && github.event.inputs.COMMIT_ID_CHOICE == 'publish-all-artifacts-in-repo'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.COMMIT_ID_CHOICE == 'publish-all-artifacts-in-repo'
     needs: get-commit
     uses: ./.github/workflows/run-publisher-with-env.yaml
     with:
