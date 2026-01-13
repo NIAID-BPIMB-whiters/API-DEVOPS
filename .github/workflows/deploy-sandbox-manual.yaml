@@ -1,0 +1,59 @@
+name: Deploy to Sandbox (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      COMMIT_ID_CHOICE:
+        description: 'Deployment mode'
+        required: true
+        type: choice
+        default: "publish-all-artifacts-in-repo"
+        options:
+          - "publish-artifacts-in-last-commit"
+          - "publish-all-artifacts-in-repo"
+
+jobs:
+  deploy-to-sandbox:
+    runs-on: ubuntu-latest
+    environment: apim-bpimb-sb
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+    
+      - name: Run Spectral
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install -g @stoplight/spectral-cli
+      - run: spectral lint "${{ github.workspace }}/apimartifacts/apis/*.{json,yml,yaml}" --ruleset https://raw.githubusercontent.com/connectedcircuits/devops-api-linter/main/rules.yaml
+        continue-on-error: true
+
+      - name: Run publisher with commit ID
+        if: github.event.inputs.COMMIT_ID_CHOICE == 'publish-artifacts-in-last-commit'
+        uses: Azure/apim-publisher@main
+        with:
+          COMMIT_ID: ${{ github.sha }}
+          CONFIGURATION_FILE_PATH: configuration.sandbox.yaml
+          RESOURCE_GROUP_NAME: niaid-bpimb-apim-dev-rg
+          API_MANAGEMENT_SERVICE_NAME: niaid-bpimb-apim-sb
+          API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+
+      - name: Run publisher without commit ID (all artifacts)
+        if: github.event.inputs.COMMIT_ID_CHOICE == 'publish-all-artifacts-in-repo'
+        uses: Azure/apim-publisher@main
+        with:
+          CONFIGURATION_FILE_PATH: configuration.sandbox.yaml
+          RESOURCE_GROUP_NAME: niaid-bpimb-apim-dev-rg
+          API_MANAGEMENT_SERVICE_NAME: niaid-bpimb-apim-sb
+          API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
