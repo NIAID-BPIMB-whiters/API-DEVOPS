@@ -61,7 +61,7 @@ This repository implements **GitOps for Azure API Management (APIM)** using Micr
 
 ## Environments
 
-This repository manages three APIM instances with five GitHub environments (three credential environments + two approval gates):
+This repository manages four APIM instances with six GitHub environments (four credential environments + two approval gates):
 
 | GitHub Environment | Purpose | APIM Service | Resource Group | Network |
 |-------------------|---------|--------------|----------------|---------|
@@ -88,6 +88,7 @@ graph TB
         subgraph VNet["nih-niaid-azurestrides-dev-vnet-apim-az<br/>Internal VNet"]
             subgraph Subnet1["APIM Subnet"]
                 DAIDS[niaid-daids-connect-apim<br/>Private IP: 10.x.x.x]
+                SB_APIM[niaid-bpimb-apim-sb<br/>Private IP: 10.x.x.x<br/>Sandbox/POC]
                 DEV_APIM[niaid-bpimb-apim-dev<br/>Private IP: 10.x.x.x]
                 QA_APIM[niaid-bpimb-apim-qa<br/>Private IP: 10.x.x.x]
             end
@@ -319,6 +320,32 @@ Each API in `apimartifacts/apis/` contains:
   - Region: `eastus`
   - Instrumentation Key: `98066d90-6565-4993-b071-c5a453f2ce44`
   - Purpose: APIM diagnostics and logging
+
+#### Sandbox Environment (POC Development)
+- **APIM Service**: `niaid-bpimb-apim-sb`
+  - Resource Group: `niaid-bpimb-apim-sb-rg`
+  - Region: `eastus`
+  - SKU: `Developer`
+  - Network: Internal VNet (TBD - pending APIM provisioning completion)
+  - Gateway: `niaid-bpimb-apim-sb.azure-api.net`
+  - Purpose: Experimental/POC development, manual promotion to DEV
+  - **Status**: ⏳ Provisioning (30-45 minutes)
+
+- **Application Insights**: `niaid-bpimb-apim-sb-ai`
+  - Resource Group: `niaid-bpimb-apim-sb-rg`
+  - Region: `eastus`
+  - Connection String: Stored in Key Vault
+  - Purpose: Sandbox APIM diagnostics and logging
+
+- **Key Vault**: `kv-niaid-apim-sb`
+  - Resource Group: `niaid-bpimb-apim-sb-rg`
+  - Region: `eastus`
+  - Purpose: Sandbox secrets management (App Insights connection string)
+
+- **Service Principal**: `apiops-sb-sp`
+  - App ID: `e493d820-c4d2-45d3-b66d-e46459cfa4c2`
+  - Purpose: Dedicated sandbox environment access
+  - Created: January 13, 2026
 
 #### DEV Environment (Deployment Target)
 - **APIM Service**: `niaid-bpimb-apim-dev`

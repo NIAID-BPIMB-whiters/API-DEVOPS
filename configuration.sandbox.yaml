@@ -52,11 +52,10 @@ apimServiceName: niaid-bpimb-apim-sb  # TARGET: SANDBOX APIM Service
 namedValues:
   # Remap Key Vault references to SANDBOX environment
   # Repository may contain DEV references - remap to sandbox Key Vault
-  # PLACEHOLDER: Update with actual Sandbox Key Vault name once created
   - name: apim-ai-connection-string
     properties:
       keyVault:
-        secretIdentifier: https://kv-niaid-bpimb-apim-sb.vault.azure.net/secrets/apim-ai-connection-string
+        secretIdentifier: https://kv-niaid-apim-sb.vault.azure.net/secrets/apim-ai-connection-string
 
 loggers:
   # NOTE: APIops v6.0.2 does NOT support remapping logger resource IDs in diagnostics
@@ -70,10 +69,9 @@ loggers:
   - name: apim-daids-connect-ai
     properties:
       loggerType: applicationInsights
-      # PLACEHOLDER: Update with actual Sandbox resource IDs once created
       resourceId: /subscriptions/18fc6b8b-44fa-47d7-ae51-36766ac67165/resourceGroups/niaid-bpimb-apim-sb-rg/providers/Microsoft.Insights/components/niaid-bpimb-apim-sb-ai
       credentials:
-        connectionString: "{{niaid-bpimb-apim-sb-ai-connection-string}}"
+        connectionString: "{{apim-ai-connection-string}}"
 
 diagnostics:
   # Sandbox-specific diagnostic configurations can be added here
