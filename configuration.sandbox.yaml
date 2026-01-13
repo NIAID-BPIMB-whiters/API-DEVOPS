@@ -146,6 +146,10 @@ apis:
   # - name: test-api
   #   properties:
   #     subscriptionRequired: false  # Easier testing without keys
+  
+  # Exclude APIs that require authorization servers not yet configured in sandbox
+  - name: crms-api-qa
+    exclude: true
 
 # =============================================================================
 # SANDBOX ENVIRONMENT NOTES
