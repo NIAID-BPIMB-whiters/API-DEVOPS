@@ -177,6 +177,23 @@ gh workflow run test-apis-ephemeral.yaml -f ENVIRONMENT=apim-bpimb-dev -f APIS="
 gh workflow run run-extractor.yaml
 ```
 
+### Deploy to Sandbox (Manual POC Workflow)
+```bash
+# Deploy all artifacts from repository to Sandbox
+gh workflow run run-publisher.yaml \
+  -f TARGET_ENVIRONMENT=sandbox-only \
+  -f COMMIT_ID_CHOICE=publish-all-artifacts-in-repo
+
+# Deploy only changed artifacts (incremental)
+gh workflow run run-publisher.yaml \
+  -f TARGET_ENVIRONMENT=sandbox-only \
+  -f COMMIT_ID_CHOICE=publish-artifacts-in-last-commit
+
+# Monitor deployment
+gh run list --workflow=run-publisher.yaml --limit 1
+gh run watch <run-id>
+```
+
 ### Rollback a Deployment
 ```bash
 # Step 1: List recent deployment tags
@@ -490,16 +507,34 @@ gh workflow run run-extractor.yaml -f CONFIGURATION_YAML_PATH="configuration.ext
 
 ### 2. Publish to DEV and QA (`run-publisher.yaml`)
 
-**Purpose**: Deploy artifacts from repository to DEV and QA APIM environments
+**Purpose**: Deploy artifacts from repository to DEV, QA, and Sandbox APIM environments
 
 **Trigger**: 
-- Push to `main` branch (automatic)
-- Manual workflow dispatch
+- Push to `main` branch (automatic DEV → QA pipeline only)
+- Manual workflow dispatch (supports Sandbox deployment)
 
 **Pipeline Flow**:
 ```
+# Automatic (on push to main):
 Git Repository (apimartifacts/) → Publisher Tool → DEV APIM → Test DEV → QA APIM → Test QA
+
+# Manual (sandbox only):
+Git Repository (apimartifacts/) → Publisher Tool → Sandbox APIM
 ```
+
+**Target Environment Options**:
+
+1. **dev-and-qa** (default):
+   - Deploys to DEV, then QA (automatic pipeline)
+   - Requires approval gates
+   - Triggers post-deployment testing
+   - Available on push or manual dispatch
+
+2. **sandbox-only**:
+   - Deploys only to Sandbox APIM
+   - Manual dispatch only (no auto-deploy on push)
+   - No approval gates or automated tests
+   - For POC/experimental development
 
 **Deployment Modes**:
 
@@ -734,14 +769,28 @@ Deploy-To-DEV-With-Commit-ID:
 
 **Usage**:
 ```bash
-# Automatic on push to main (incremental)
+# Automatic on push to main (deploys to DEV → QA)
 git push origin main
 
-# Manual full redeployment
-gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in-repo"
+# Manual DEV → QA deployment (full redeployment)
+gh workflow run run-publisher.yaml \
+  -f TARGET_ENVIRONMENT=dev-and-qa \
+  -f COMMIT_ID_CHOICE=publish-all-artifacts-in-repo
 
-# Manual incremental deployment
-gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-artifacts-in-last-commit"
+# Manual DEV → QA deployment (incremental)
+gh workflow run run-publisher.yaml \
+  -f TARGET_ENVIRONMENT=dev-and-qa \
+  -f COMMIT_ID_CHOICE=publish-artifacts-in-last-commit
+
+# Deploy to Sandbox only (full redeployment)
+gh workflow run run-publisher.yaml \
+  -f TARGET_ENVIRONMENT=sandbox-only \
+  -f COMMIT_ID_CHOICE=publish-all-artifacts-in-repo
+
+# Deploy to Sandbox only (incremental)
+gh workflow run run-publisher.yaml \
+  -f TARGET_ENVIRONMENT=sandbox-only \
+  -f COMMIT_ID_CHOICE=publish-artifacts-in-last-commit
 ```
 
 ---
