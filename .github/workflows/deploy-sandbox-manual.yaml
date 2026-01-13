@@ -45,12 +45,18 @@ jobs:
           COMMIT_ID: ${{ github.sha }}
         run: |
           set -e
+          echo "Temporarily excluding gateways (Developer tier limit: 1 gateway)..."
+          mv apimartifacts/gateways apimartifacts/gateways.excluded || true
+          
           echo "Downloading publisher..."
           wget -O publisher.zip https://github.com/Azure/apiops/releases/download/${{ env.apiops_release_version }}/publisher-linux-x64.zip
           unzip publisher.zip
           chmod +x ./publisher
           echo "Running publisher with commit ID..."
           ./publisher
+          
+          echo "Restoring gateways directory..."
+          mv apimartifacts/gateways.excluded apimartifacts/gateways || true
         shell: bash
 
       - name: Run publisher without commit ID (all artifacts)
@@ -65,10 +71,16 @@ jobs:
           CONFIGURATION_YAML_PATH: ${{ github.workspace }}/configuration.sandbox.yaml
         run: |
           set -e
+          echo "Temporarily excluding gateways (Developer tier limit: 1 gateway)..."
+          mv apimartifacts/gateways apimartifacts/gateways.excluded || true
+          
           echo "Downloading publisher..."
           wget -O publisher.zip https://github.com/Azure/apiops/releases/download/${{ env.apiops_release_version }}/publisher-linux-x64.zip
           unzip publisher.zip
           chmod +x ./publisher
-          echo "Running publisher (all artifacts)..."
+          echo "Running publisher (all artifacts except gateways)..."
           ./publisher
+          
+          echo "Restoring gateways directory..."
+          mv apimartifacts/gateways.excluded apimartifacts/gateways || true
         shell: bash
