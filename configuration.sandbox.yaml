@@ -95,19 +95,15 @@ backends:
   #     # Note: For HTTPS backends with self-signed certs in sandbox, 
   #     # may need to disable cert validation (NOT recommended for DEV/QA/PROD)
 
-gateways:
+gateways: []
   # EXCLUDE ALL GATEWAYS FROM SANDBOX DEPLOYMENT
   # 
   # REASON: Developer tier APIM only supports 1 gateway
   # Sandbox may already have NIAID_CRMS_Test gateway deployed
   # Repository may contain multiple gateways (NIAID_CRMS_Test, test-echo)
   # 
-  # WORKAROUND: Exclude all gateways to prevent deployment failures
+  # WORKAROUND: Set gateways to empty array to prevent any gateway deployments
   # Gateways can be manually managed in sandbox if needed
-  - name: NIAID_CRMS_Test
-    exclude: true
-  - name: test-echo
-    exclude: true
 
 # =============================================================================
 # SOAP/WSDL API MANAGEMENT NOTES
