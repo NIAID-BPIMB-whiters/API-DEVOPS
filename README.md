@@ -46,12 +46,12 @@
 
 ## Overview
 
-This repository implements **GitOps for Azure API Management (APIM)** using Microsoft's [Azure APIops Toolkit](https://github.com/Azure/apiops). It automates the extraction, version control, and deployment of API Management artifacts across DAIDS_DEV, DEV, and QA environments.
+This repository implements **GitOps for Azure API Management (APIM)** using Microsoft's [Azure APIops Toolkit](https://github.com/Azure/apiops). It automates the extraction, version control, and deployment of API Management artifacts across DEV, QA, and Sandbox environments.
 
 ### Key Features
 
-- ✅ **Automated API Extraction** from DAIDS_DEV APIM to Git
-- ✅ **Automated Deployment** to DEV and QA APIM via push to main branch
+- ✅ **Automated API Extraction** from DEV APIM to Git
+- ✅ **Automated Deployment** to QA APIM via push to main branch
 - ✅ **Version Control** for all APIM artifacts (APIs, policies, backends, products, etc.)
 - ✅ **Environment-Specific Configuration** with Key Vault integration and environment remapping
 - ✅ **Automated API Testing** using ephemeral Azure VMs for internal VNet testing
@@ -67,20 +67,17 @@ This repository manages four APIM instances with six GitHub environments (four c
 
 | GitHub Environment | Purpose | APIM Service | Resource Group | Network |
 |-------------------|---------|--------------|----------------|---------|
-| **apim-daids-connect** | Extractor source | niaid-daids-connect-apim | nih-niaid-azurestrides-dev-rg-apim-az | Internal VNet |
-| **apim-bpimb-sb** | Sandbox/POC development | niaid-bpimb-apim-sb | niaid-bpimb-apim-sb-rg | Internal VNet |
-| **apim-bpimb-dev** | DEV deployment target | niaid-bpimb-apim-dev | nih-niaid-azurestrides-dev-rg-apim-az | Internal VNet |
+| **apim-bpimb-dev** | Extraction source | niaid-bpimb-apim-dev | nih-niaid-azurestrides-dev-rg-apim-az | Internal VNet |
+| **apim-bpimb-sb** | Sandbox/POC development | niaid-bpimb-apim-sb | niaid-bpimb-apim-sb-rg | External (Public) |
 | **apim-bpimb-qa** | QA deployment target | niaid-bpimb-apim-qa | nih-niaid-azurestrides-dev-rg-apim-az | Internal VNet |
-| **approve-apim-bpimb-dev** | DEV approval gate | N/A - approval only | N/A | N/A |
-| **approve-apim-bpimb-qa** | QA approval gate | N/A - approval only | N/A | N/A |
-
+| **apim-daids-connect** | Legacy (audit only) | niaid-daids-connect-apim | nih-niaid-azurestrides-dev-rg-apim-az | Internal VNet |
 **Environment Secrets** (stored in GitHub environment settings):
-- **apim-daids-connect**: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME` (niaid-daids-connect-apim)
-- **apim-bpimb-sb**: `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP_NAME` (niaid-bpimb-apim-sb-rg), `API_MANAGEMENT_SERVICE_NAME` (niaid-bpimb-apim-sb)
 - **apim-bpimb-dev**: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME` (niaid-bpimb-apim-dev), `APIM_SUBSCRIPTION_KEY`
+- **apim-bpimb-sb**: `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP_NAME` (niaid-bpimb-apim-sb-rg), `API_MANAGEMENT_SERVICE_NAME` (niaid-bpimb-apim-sb)
 - **apim-bpimb-qa**: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME` (niaid-bpimb-apim-qa), `APIM_SUBSCRIPTION_KEY`
+- **apim-daids-connect**: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME` (niaid-daids-connect-apim) - Legacy extraction for audit/comparison
 
-**Approval Environments** are configured with required reviewers to gate deployments to DEV and QA.
+**Approval Environment** (`approve-apim-bpimb-qa`) is configured with required reviewers to gate QA deployments.
 
 ### Network Architecture
 
@@ -486,21 +483,26 @@ To receive email notifications when VM cleanup is required or workflows fail:
 
 ### 1. Extract Artifacts (`run-extractor.yaml`)
 
-**Purpose**: Extract APIM artifacts from DAIDS_DEV environment to Git repository
+**Purpose**: Extract APIM artifacts from source environment to Git repository
 
 **Trigger**: Manual workflow dispatch
 
 **Pipeline Flow**:
 ```
-DAIDS_DEV APIM (apim-daids-connect) → Extractor Tool → apimartifacts/ folder → Git commit
+DEV APIM (apim-bpimb-dev) → Extractor Tool → apimartifacts/ folder → Git commit → PR created
 ```
 
+**Source Environment Options**:
+- **apim-bpimb-dev** (default): Primary extraction source for DEV → QA → PROD pipeline
+- **apim-daids-connect**: Legacy extraction for comparison/audit purposes
+- **apim-bpimb-sb**: Sandbox extraction for troubleshooting/comparison (not for promotion)
+
 **Configuration Options**:
-- **Extract All APIs**: Extracts all artifacts from DAIDS_DEV APIM
+- **Extract All APIs**: Extracts all artifacts from selected source APIM
 - **Use configuration.extractor.yaml**: Selectively extract specific APIs/artifacts
 
 **Environment Variables**:
-- Uses `daids_dev` environment secrets
+- Uses selected environment secrets
 - `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`
 - `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP_NAME`
 - `API_MANAGEMENT_SERVICE_NAME`
@@ -509,26 +511,29 @@ DAIDS_DEV APIM (apim-daids-connect) → Extractor Tool → apimartifacts/ folder
 
 **Usage**:
 ```bash
-# Extract all APIs
-gh workflow run run-extractor.yaml -f CONFIGURATION_YAML_PATH="Extract All APIs"
+# Extract from DEV (default)
+gh workflow run run-extractor.yaml -f SOURCE_ENVIRONMENT=apim-bpimb-dev -f CONFIGURATION_YAML_PATH="Extract All APIs"
+
+# Extract from DAIDS (legacy/comparison)
+gh workflow run run-extractor.yaml -f SOURCE_ENVIRONMENT=apim-daids-connect -f CONFIGURATION_YAML_PATH="Extract All APIs"
 
 # Extract specific APIs defined in configuration
-gh workflow run run-extractor.yaml -f CONFIGURATION_YAML_PATH="configuration.extractor.yaml"
+gh workflow run run-extractor.yaml -f SOURCE_ENVIRONMENT=apim-bpimb-dev -f CONFIGURATION_YAML_PATH="configuration.extractor.yaml"
 ```
 
 ---
 
-### 2. Publish to DEV and QA (`run-publisher.yaml`)
+### 2. Publish to QA (`run-publisher.yaml`)
 
-**Purpose**: Deploy artifacts from repository to DEV and QA APIM environments
+**Purpose**: Deploy artifacts from repository to QA APIM environment
 
 **Trigger**: 
-- Push to `main` branch (automatic DEV → QA pipeline)
+- Push to `main` branch (automatic deployment to QA)
 - Manual workflow dispatch
 
 **Pipeline Flow**:
 ```
-Git Repository (apimartifacts/) → Publisher Tool → DEV APIM → Approve → QA APIM
+DEV (extraction source) → Git Repository (apimartifacts/) → Publisher Tool → Approve → QA APIM
 ```
 
 **Deployment Modes**:
@@ -543,13 +548,16 @@ Git Repository (apimartifacts/) → Publisher Tool → DEV APIM → Approve → 
    - Used for disaster recovery or after build failures
    - Select "publish-all-artifacts-in-repo" option
 
-**Approval Gates**:
-- DEV deployment: Uses `approve-apim-bpimb-dev` environment with required reviewers
+**Approval Gate**:
 - QA deployment: Uses `approve-apim-bpimb-qa` environment with required reviewers
 
 **Post-Deployment**:
-- Creates deployment tags: `deploy-dev-{timestamp}-{sha}`, `deploy-qa-{timestamp}-{sha}`
+- Runs API tests against QA environment
+- Creates deployment tags: `deploy-qa-{timestamp}-{sha}`
+- Cleans up orphaned APIs in QA
 - Enables rollback to any previous deployment
+
+**Note**: DEV is now the extraction source and is no longer a deployment target in this workflow.
 
 ---
 
@@ -2048,15 +2056,7 @@ The `configuration.dev.yaml` and `configuration.qa.yaml` files are used for **de
 
 #### Infrastructure Details by Environment
 
-##### DAIDS_DEV (Source Environment - Temporary)
-- **APIM**: `apim-daids-connect` in `nih-niaid-avidpoc-dev-rg`
-- **App Insights**: `apim-daids-connect-ai`
-  - Instrumentation Key: `5df42b01-d64f-4b73-bb4d-ee61cb36e82d`
-  - Connection String: Stored in named value `apim-ai-connection-string`
-- **Logger**: `niaid-bpimb-apim-ai` → references `apim-ai-connection-string`
-- **Status**: Source for extractions; will be decommissioned after DEV is fully operational
-
-##### DEV (Primary Target Environment)
+##### DEV (Primary Environment)
 - **APIM**: `niaid-bpimb-apim-dev` in `niaid-bpimb-apim-dev-rg`
 - **App Insights**: `niaid-bpimb-apim-dev-ai`
   - Instrumentation Key: `77779b1a-63f2-4c18-a4da-1a9068bb6b13`
@@ -2064,7 +2064,7 @@ The `configuration.dev.yaml` and `configuration.qa.yaml` files are used for **de
   - Connection String: Stored in named value `apim-ai-connection-string`
 - **Logger**: `niaid-bpimb-apim-ai` → references `apim-ai-connection-string`
 - **Storage Account**: `niaidapimdevdrzrs` (Standard_ZRS for backup/DR)
-- **Status**: Active deployment target; will become extraction source after DAIDS_DEV retirement
+- **Status**: Primary extraction source for production pipeline
 
 ##### QA (Testing Environment)
 - **APIM**: `niaid-bpimb-apim-qa` in `niaid-bpimb-apim-qa-rg`
@@ -2073,11 +2073,17 @@ The `configuration.dev.yaml` and `configuration.qa.yaml` files are used for **de
   - Application ID: `b43ff4e0-fe96-4c73-b48a-31ff0c6dcff5`
   - Connection String: Stored in named value `apim-ai-connection-string`
 - **Logger**: `niaid-bpimb-apim-ai` → references `apim-ai-connection-string`
-- **Status**: Configured for deployment; receives artifacts after DEV validation
+- **Status**: Active deployment target; receives artifacts after extraction from DEV
+
+##### DAIDS (Legacy - Audit Only)
+- **APIM**: `apim-daids-connect` in `nih-niaid-avidpoc-dev-rg`
+- **App Insights**: `apim-daids-connect-ai`
+- **Status**: Legacy environment; used for extraction comparison and audit purposes only
+- **Note**: No longer the primary extraction source (replaced by DEV)
 
 **Deployment Flow:**
 ```
-DAIDS_DEV (extract) → Repository (standardized names) → DEV (deploy + test) → QA (deploy + test)
+DEV (extract) → Repository (standardized names) → QA (deploy + test)
 ```
 
 **Note**: Production environment setup is planned for future implementation.
@@ -2088,36 +2094,28 @@ DAIDS_DEV (extract) → Repository (standardized names) → DEV (deploy + test) 
 
 ## Cross-Environment Architecture
 
-### Why Artifacts from DAIDS_DEV Deploy to DEV/QA
+### Extraction and Deployment Flow
 
 This repository implements a **source-target** architecture:
 
-- **Source Environment (apim-daids-connect / DAIDS_DEV)**: Where API artifacts are extracted FROM
-- **Target Environments (apim-bpimb-dev / DEV, apim-bpimb-qa / QA)**: Where API artifacts are deployed TO
+- **Source Environment (apim-bpimb-dev / DEV)**: Where API artifacts are extracted FROM
+- **Target Environment (apim-bpimb-qa / QA)**: Where API artifacts are deployed TO
+- **Legacy Environment (apim-daids-connect / DAIDS)**: Used for extraction comparison and audit only
 
 ```mermaid
 graph TD
-    subgraph Source["Source Environment (DAIDS_DEV)"]
-        DAIDS[niaid-daids-connect-apim<br/>Internal VNet]
-        DAIDS_AI[apim-daids-connect-ai<br/>Application Insights]
-        DAIDS --> |logs to| DAIDS_AI
+    subgraph Source["Source Environment (DEV)"]
+        DEV_SRC[niaid-bpimb-apim-dev<br/>Internal VNet]
+        DEV_SRC_AI[niaid-bpimb-apim-dev-ai<br/>Application Insights]
+        DEV_SRC --> |logs to| DEV_SRC_AI
     end
     
     subgraph Repo["Git Repository (API-DEVOPS)"]
         direction TB
         APIS[APIs<br/>Policies<br/>Backends]
-        CONFIG_DEV[configuration.dev.yaml<br/>DEV remapping]
         CONFIG_QA[configuration.qa.yaml<br/>QA remapping]
         CONFIG_SB[configuration.sandbox.yaml<br/>Sandbox remapping]
         ARTIFACTS[apimartifacts/<br/>Standardized Names]
-    end
-    
-    subgraph DEV["DEV Environment"]
-        DEV_APIM[niaid-bpimb-apim-dev<br/>Internal VNet]
-        DEV_AI[niaid-bpimb-apim-dev-ai<br/>Application Insights]
-        DEV_KV[kv-niaid-bpimb-apim-dev<br/>Key Vault]
-        DEV_APIM --> |logs to| DEV_AI
-        DEV_APIM --> |secrets from| DEV_KV
     end
     
     subgraph QA["QA Environment"]
@@ -2136,26 +2134,32 @@ graph TD
         SB_APIM --> |secrets from| SB_KV
     end
     
-    DAIDS -->|Extractor<br/>run-extractor.yaml| ARTIFACTS
-    ARTIFACTS -->|Publisher + DEV config<br/>run-publisher.yaml| DEV_APIM
+    subgraph Legacy["DAIDS (Legacy - Audit Only)"]
+        DAIDS[niaid-daids-connect-apim<br/>Internal VNet]
+        DAIDS_AI[apim-daids-connect-ai<br/>Application Insights]
+        DAIDS --> |logs to| DAIDS_AI
+    end
+    
+    DEV_SRC -->|Extractor<br/>run-extractor.yaml| ARTIFACTS
+    DAIDS -.->|Legacy Extraction<br/>For Comparison| ARTIFACTS
     ARTIFACTS -->|Publisher + QA config<br/>run-publisher.yaml| QA_APIM
     ARTIFACTS -->|Manual Deploy + Sandbox config<br/>deploy-sandbox-manual.yaml| SB_APIM
-    CONFIG_DEV -.->|remaps resources| DEV_APIM
     CONFIG_QA -.->|remaps resources| QA_APIM
     CONFIG_SB -.->|remaps resources| SB_APIM
     
-    style DAIDS fill:#fff4e6
-    style DEV_APIM fill:#e6f7ff
+    style DEV_SRC fill:#e6f7ff
     style QA_APIM fill:#f0f5ff
     style SB_APIM fill:#fff9e6
+    style DAIDS fill:#f5f5f5
     style ARTIFACTS fill:#f6ffed
 ```
 
 **Why This Pattern?**
-- DAIDS_DEV is the **authoritative source** for API definitions and policies
-- DEV and QA are **isolated deployment targets** with their own infrastructure
+- DEV is the **authoritative source** for API definitions and policies
+- QA is the **isolated deployment target** with its own infrastructure
 - Sandbox is a **POC environment** for experimental work (manual promotion to DEV)
-- Changes are tested in DEV before promoting to QA
+- DAIDS is retained for **audit and comparison** purposes only
+- Changes are tested in QA before promoting to PROD (future)
 - Each target environment uses **environment-specific configurations** (Key Vault URLs, backend endpoints, etc.)
 
 ### Standardized Resource Naming
@@ -2166,10 +2170,10 @@ The most critical architectural decision: **resource names are standardized acro
 
 | Environment | Logger Name (in APIM) | Backing App Insights Resource |
 |-------------|----------------------|------------------------------|
-| DAIDS_DEV   | `niaid-bpimb-apim-ai` | `apim-daids-connect-ai` |
+| DEV (Source) | `niaid-bpimb-apim-ai` | `niaid-bpimb-apim-dev-ai` |
 | Sandbox     | `niaid-bpimb-apim-ai` | `niaid-bpimb-apim-sb-ai` |
-| DEV         | `niaid-bpimb-apim-ai` | `niaid-bpimb-apim-dev-ai` |
 | QA          | `niaid-bpimb-apim-ai` | `niaid-bpimb-apim-qa-ai` |
+| DAIDS (Legacy) | `niaid-bpimb-apim-ai` | `apim-daids-connect-ai` |
 
 ```mermaid
 graph LR
@@ -2314,7 +2318,7 @@ git diff
 
 # Commit to feature branch
 git add .
-git commit -m "Add new API from DAIDS_DEV environment"
+git commit -m "Add new API from DEV environment"
 git push origin feature/add-new-api
 ```
 
@@ -2499,7 +2503,7 @@ For service principals used in GitHub Actions workflows:
 
 ### Version Control Best Practices
 
-- ✅ Always extract from DAIDS_DEV before making repository changes
+- ✅ Always extract from DEV before making repository changes
 - ✅ Use feature branches for code review (optional for simple changes)
 - ✅ Push to main triggers automatic deployment to DEV → QA
 - ✅ Test in DAIDS_DEV APIM before extracting
