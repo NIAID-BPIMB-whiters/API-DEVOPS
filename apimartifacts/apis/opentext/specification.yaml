@@ -4,13 +4,27 @@ info:
   description: ''
   version: '1.0'
 servers:
-  - url: https://gateway.apimdev.niaid.nih.gov/opentext
+  - url: https://niaid-bpimb-apim-dev.azure-api.net/opentext
 paths:
   /livelink/livelink.exe/api/v1/ping:
     get:
       summary: PING
       description: PING
       operationId: ping
+      responses:
+        '200':
+          description: ''
+  '/livelink/livelink.exe/api/v2/nodes/{nodeid}':
+    get:
+      summary: GetNodeDetails
+      description: GetNodeDetails
+      operationId: getnodedetails
+      parameters:
+        - name: nodeid
+          in: path
+          required: true
+          schema:
+            type: ''
       responses:
         '200':
           description: ''
@@ -66,19 +80,6 @@ paths:
       summary: testoauthpolicy
       description: testoauthpolicy
       operationId: testoauthpolicy
-      responses:
-        '200':
-          description: ''
-  '/livelink/livelink.exe/api/v2/nodes/{nodeid}':
-    get:
-      summary: GetNodeDetails
-      operationId: getnodedetails
-      parameters:
-        - name: nodeid
-          in: path
-          required: true
-          schema:
-            type: ''
       responses:
         '200':
           description: ''

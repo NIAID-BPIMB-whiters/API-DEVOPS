@@ -3,7 +3,7 @@
     "path": "merlin",
     "apiRevision": "1",
     "apiVersion": "v1",
-    "apiVersionSetId": "/subscriptions/18fc6b8b-44fa-47d7-ae51-36766ac67165/resourceGroups/nih-niaid-avidpoc-dev-rg/providers/Microsoft.ApiManagement/service/apim-daids-connect/apiVersionSets/69558de2b8cf00b40e4b334f",
+    "apiVersionSetId": "/subscriptions/18fc6b8b-44fa-47d7-ae51-36766ac67165/resourceGroups/niaid-bpimb-apim-dev-rg/providers/Microsoft.ApiManagement/service/niaid-bpimb-apim-dev/apiVersionSets/69558de2b8cf00b40e4b334f",
     "authenticationSettings": {},
     "description": "",
     "isCurrent": true,
