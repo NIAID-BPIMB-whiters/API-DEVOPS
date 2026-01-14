@@ -1,5 +1,7 @@
 name: Promote APIs from Sandbox to DEV
 
+# Promotes experimental APIs from Sandbox APIM to DEV APIM
+
 on:
   workflow_dispatch:
     inputs:
