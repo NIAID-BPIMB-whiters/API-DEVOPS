@@ -242,9 +242,3 @@ Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{
             echo "- ⚠️  Changes NOT committed to repo - DEV only deployment" >> $GITHUB_STEP_SUMMARY
             echo "- 💡 Run extractor from DEV to capture in repository" >> $GITHUB_STEP_SUMMARY
           fi
-            echo "- ✅ Changes committed to main branch" >> $GITHUB_STEP_SUMMARY
-            echo "- 🔄 Publisher workflow will deploy to QA (requires approval)" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "- ⚠️  Changes NOT committed to repo - DEV only deployment" >> $GITHUB_STEP_SUMMARY
-            echo "- 💡 Run extractor from DEV to capture in repository" >> $GITHUB_STEP_SUMMARY
-          fi
