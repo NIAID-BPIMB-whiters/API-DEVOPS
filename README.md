@@ -92,7 +92,6 @@ graph TB
         subgraph VNet["nih-niaid-azurestrides-dev-vnet-apim-az<br/>Internal VNet"]
             subgraph Subnet1["APIM Subnet"]
                 DAIDS[niaid-daids-connect-apim<br/>Private IP: 10.x.x.x]
-                SB_APIM[niaid-bpimb-apim-sb<br/>Private IP: 10.x.x.x<br/>Sandbox/POC]
                 DEV_APIM[niaid-bpimb-apim-dev<br/>Private IP: 10.x.x.x]
                 QA_APIM[niaid-bpimb-apim-qa<br/>Private IP: 10.x.x.x]
             end
@@ -108,36 +107,49 @@ graph TB
             DEV_KV[kv-niaid-bpimb-apim-dev<br/>Key Vault]
             QA_KV[kv-niaid-bpimb-apim-qa<br/>Key Vault]
         end
+        
+        subgraph SandboxRG["Sandbox Resource Group<br/>niaid-bpimb-apim-sb-rg"]
+            SB_APIM[niaid-bpimb-apim-sb<br/>Public Gateway<br/>Developer Tier]
+            SB_AI[niaid-bpimb-apim-sb-ai<br/>Application Insights]
+            SB_KV[kv-niaid-apim-sb<br/>Key Vault]
+        end
     end
     
     subgraph GitHub["GitHub Actions"]
         EXTRACTOR[Extractor Workflow]
-        PUBLISHER[Publisher Workflow]
+        PUBLISHER[Publisher Workflow<br/>DEV → QA]
+        SANDBOX_DEPLOY[Sandbox Deploy Workflow<br/>Manual POC]
         TESTS[Ephemeral Test Workflow]
     end
     
     EXTRACTOR -->|Extract via Azure API| DAIDS
     PUBLISHER -->|Deploy via Azure API| DEV_APIM
     PUBLISHER -->|Deploy via Azure API| QA_APIM
+    SANDBOX_DEPLOY -->|Deploy via Azure API| SB_APIM
     TESTS -->|Create VM in VNet| TEST_VM
     TEST_VM -->|Test via private IP| DEV_APIM
     TEST_VM -->|Test via private IP| QA_APIM
     DEV_APIM -->|Logging| DEV_AI
     QA_APIM -->|Logging| QA_AI
+    SB_APIM -->|Logging| SB_AI
     DEV_APIM -->|Secrets| DEV_KV
     QA_APIM -->|Secrets| QA_KV
+    SB_APIM -->|Secrets| SB_KV
     
     style DAIDS fill:#fff4e6
     style DEV_APIM fill:#e6f7ff
     style QA_APIM fill:#f0f5ff
+    style SB_APIM fill:#fff9e6
     style TEST_VM fill:#f6ffed
 ```
 
 **Key Points**:
-- No public IPs - all APIM instances accessible only within Azure VNet
-- Ephemeral VMs created in same VNet for testing
+- **DEV/QA APIM**: No public IPs - accessible only within Azure VNet
+- **Sandbox APIM**: Public gateway (Developer tier, no VNet support) for rapid POC development
+- Ephemeral VMs created in VNet for testing DEV/QA
 - GitHub Actions uses Azure CLI/APIs (public endpoints) for management
-- API testing requires VM inside VNet to reach private IPs
+- DEV/QA API testing requires VM inside VNet to reach private IPs
+- Sandbox directly accessible via public gateway for POC work
 
 ---
 
@@ -2096,6 +2108,7 @@ graph TD
         APIS[APIs<br/>Policies<br/>Backends]
         CONFIG_DEV[configuration.dev.yaml<br/>DEV remapping]
         CONFIG_QA[configuration.qa.yaml<br/>QA remapping]
+        CONFIG_SB[configuration.sandbox.yaml<br/>Sandbox remapping]
         ARTIFACTS[apimartifacts/<br/>Standardized Names]
     end
     
@@ -2115,21 +2128,33 @@ graph TD
         QA_APIM --> |secrets from| QA_KV
     end
     
+    subgraph Sandbox["Sandbox Environment (POC)"]
+        SB_APIM[niaid-bpimb-apim-sb<br/>Public Gateway<br/>Developer Tier]
+        SB_AI[niaid-bpimb-apim-sb-ai<br/>Application Insights]
+        SB_KV[kv-niaid-apim-sb<br/>Key Vault]
+        SB_APIM --> |logs to| SB_AI
+        SB_APIM --> |secrets from| SB_KV
+    end
+    
     DAIDS -->|Extractor<br/>run-extractor.yaml| ARTIFACTS
     ARTIFACTS -->|Publisher + DEV config<br/>run-publisher.yaml| DEV_APIM
     ARTIFACTS -->|Publisher + QA config<br/>run-publisher.yaml| QA_APIM
+    ARTIFACTS -->|Manual Deploy + Sandbox config<br/>deploy-sandbox-manual.yaml| SB_APIM
     CONFIG_DEV -.->|remaps resources| DEV_APIM
     CONFIG_QA -.->|remaps resources| QA_APIM
+    CONFIG_SB -.->|remaps resources| SB_APIM
     
     style DAIDS fill:#fff4e6
     style DEV_APIM fill:#e6f7ff
     style QA_APIM fill:#f0f5ff
+    style SB_APIM fill:#fff9e6
     style ARTIFACTS fill:#f6ffed
 ```
 
 **Why This Pattern?**
 - DAIDS_DEV is the **authoritative source** for API definitions and policies
 - DEV and QA are **isolated deployment targets** with their own infrastructure
+- Sandbox is a **POC environment** for experimental work (manual promotion to DEV)
 - Changes are tested in DEV before promoting to QA
 - Each target environment uses **environment-specific configurations** (Key Vault URLs, backend endpoints, etc.)
 
@@ -2142,6 +2167,7 @@ The most critical architectural decision: **resource names are standardized acro
 | Environment | Logger Name (in APIM) | Backing App Insights Resource |
 |-------------|----------------------|------------------------------|
 | DAIDS_DEV   | `niaid-bpimb-apim-ai` | `apim-daids-connect-ai` |
+| Sandbox     | `niaid-bpimb-apim-ai` | `niaid-bpimb-apim-sb-ai` |
 | DEV         | `niaid-bpimb-apim-ai` | `niaid-bpimb-apim-dev-ai` |
 | QA          | `niaid-bpimb-apim-ai` | `niaid-bpimb-apim-qa-ai` |
 

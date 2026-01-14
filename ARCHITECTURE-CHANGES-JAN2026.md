@@ -30,14 +30,15 @@ Create `niaid-bpimb-apim-sb` as a sandbox environment mirroring DEV architecture
 - [x] **RBAC Assignment**: Managed identity granted "Key Vault Secrets User" role on `kv-niaid-apim-sb` ✅
 
 #### Networking
-- [ ] VLAN/VNet configuration
-  - Option A: Create new subnet in existing `nih-niaid-azurestrides-dev-vnet-apim-az`
-  - Option B: Create dedicated VNet (if isolation required)
-  - **Recommendation**: Use existing VNet with new subnet to mirror DEV architecture
-- [ ] Private IP address allocation
-- [ ] Network security group rules
-- [ ] DNS configuration
-- [ ] Internal gateway URL: `niaid-bpimb-apim-sb.azure-api.net`
+- [x] **Network Type**: External (Public) ✅
+  - Virtual Network Type: None (Developer tier, public access)
+  - Public Gateway URL: `https://niaid-bpimb-apim-sb.azure-api.net`
+  - Regional Gateway URL: `https://niaid-bpimb-apim-sb-eastus-01.regional.azure-api.net`
+  - Management API: `https://niaid-bpimb-apim-sb.management.azure-api.net`
+  - Portal URL: `https://niaid-bpimb-apim-sb.portal.azure-api.net`
+  - SCM URL: `https://niaid-bpimb-apim-sb.scm.azure-api.net`
+- [x] **Location**: East US ✅
+- **Note**: Developer tier does not support VNet integration - sandbox is publicly accessible for POC work
 
 #### Service Principal
 - [ ] Create Azure AD App Registration: `apiops-sb-sp`
@@ -58,8 +59,7 @@ Create `niaid-bpimb-apim-sb` as a sandbox environment mirroring DEV architecture
   - `AZURE_RESOURCE_GROUP_NAME` = `niaid-bpimb-apim-sb-rg` ✅
   - `API_MANAGEMENT_SERVICE_NAME` = `niaid-bpimb-apim-sb` ✅
   - `APIM_SUBSCRIPTION_KEY` (for testing) - if needed
-- [ ] Create approval environment: `approve-apim-bpimb-sb`
-- [ ] Configure required reviewers for sandbox approval
+- **N/A**: Approval environment not needed for sandbox (rapid POC iteration without gates)
 
 #### Configuration Files
 - [x] Create `configuration.sandbox.yaml` ✅ CREATED (based on `configuration.dev.yaml`)
@@ -80,9 +80,7 @@ Create `niaid-bpimb-apim-sb` as a sandbox environment mirroring DEV architecture
   - Spectral linting integrated
   - Gateway exclusion via temporary directory rename (Developer tier limit: 1 gateway)
   - Uses environment: `apim-bpimb-sb`
-- [ ] Update `rollback-deployment.yaml` to support sandbox
-- [ ] Update `cleanup-orphaned-apis.yaml` to support sandbox
-- [ ] Update `test-apis-ephemeral.yaml` to test sandbox APIs
+- **N/A**: Rollback, cleanup, and automated testing not needed for sandbox (manual POC environment)
 
 **Important Implementation Notes**:
 - **Gateway Handling**: Configuration file exclusions (`gateways: []`) don't work - publisher ignores them. Workflow temporarily renames `apimartifacts/gateways` to `apimartifacts/gateways.excluded` during deployment, then restores afterward. This preserves artifacts for upstream DEV/QA/PROD deployments while respecting Developer tier's 1-gateway limit.
@@ -92,6 +90,7 @@ Create `niaid-bpimb-apim-sb` as a sandbox environment mirroring DEV architecture
 #### Documentation
 - [x] Update README.md environments table ✅
 - [x] Document sandbox deployment workflow (manual standalone approach) ✅  
+- [x] Document networking configuration ✅
 - [ ] Update architecture diagrams
 - [x] Document sandbox use cases and implementation details ✅
 
