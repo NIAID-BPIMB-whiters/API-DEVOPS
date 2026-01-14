@@ -154,23 +154,40 @@ graph TB
 
 ### Deploy an API Change
 ```bash
-# 1. Edit API artifacts in apimartifacts/
-git add apimartifacts/apis/your-api/
-git commit -m "feat: Update your-api specification"
-git push origin main
+# 1. Make changes in DEV APIM web portal (Azure portal)
+#    - Update API specifications, policies, backends, etc.
+#    - DEV is the source of truth for API definitions
 
-# 2. GitHub Actions automatically deploys to DEV → QA (with approvals)
+# 2. Run extractor to pull changes from DEV into repository
+gh workflow run run-extractor.yaml -f SOURCE_ENVIRONMENT=apim-bpimb-dev
+
+# 3. Review and merge the extractor PR
+gh pr list  # Find the extractor PR
+gh pr review <PR-number> --approve
+gh pr merge <PR-number> --squash
+
+# 4. GitHub Actions automatically deploys to QA (with approval)
 # Monitor: https://github.com/NIAID-BPIMB-whiters/API-DEVOPS/actions
 ```
 
 ### Add a New API
 ```bash
-# 1. Run extractor to pull latest from DAIDS_DEV APIM
-gh workflow run run-extractor.yaml
+# 1. Add the API in DEV APIM web portal (Azure portal)
+#    - Navigate to APIs → Add API
+#    - Configure API settings, policies, operations, etc.
 
-# 2. New API appears in apimartifacts/apis/new-api/
-# 3. (Optional) Modify configuration.*.yaml to exclude from DEV/QA if needed
-# 4. Commit and push - publisher workflow deploys automatically
+# 2. Run extractor to pull new API into repository
+gh workflow run run-extractor.yaml -f SOURCE_ENVIRONMENT=apim-bpimb-dev
+
+# 3. Review and merge the extractor PR
+gh pr list
+gh pr review <PR-number> --approve
+gh pr merge <PR-number> --squash
+
+# 4. GitHub Actions automatically deploys to QA (with approval)
+# Monitor: https://github.com/NIAID-BPIMB-whiters/API-DEVOPS/actions
+
+# 5. (Optional) Modify configuration.qa.yaml to exclude from QA if needed
 ```
 
 ### Run Tests Manually
@@ -711,22 +728,15 @@ Deploy → Test → Tag (if tests pass) → Cleanup Orphaned APIs
 
 ```mermaid
 graph TD
-    START([Push to main or<br/>manual trigger]) --> APPROVE_DEV{Approval Gate<br/>approve-apim-bpimb-dev}
-    APPROVE_DEV --> |Reviewer approves| GET_COMMIT[Get Commit ID]
-    GET_COMMIT --> DEPLOY_DEV[Deploy to DEV<br/>uses: apim-bpimb-dev secrets]
-    DEPLOY_DEV --> TEST_DEV[Test DEV APIs<br/>ephemeral VM]
-    TEST_DEV --> |Tests pass| APPROVE_QA{Approval Gate<br/>approve-apim-bpimb-qa}
-    TEST_DEV --> |Tests fail| FAIL_DEV[❌ Stop Pipeline]
+    START([Push to main or<br/>manual trigger]) --> GET_COMMIT[Get Commit ID]
+    GET_COMMIT --> APPROVE_QA{Approval Gate<br/>approve-apim-bpimb-qa}
     APPROVE_QA --> |Reviewer approves| DEPLOY_QA[Deploy to QA<br/>uses: apim-bpimb-qa secrets]
     DEPLOY_QA --> TEST_QA[Test QA APIs<br/>ephemeral VM]
     TEST_QA --> |Tests pass| SUCCESS[✅ Complete]
     TEST_QA --> |Tests fail| FAIL_QA[❌ Stop Pipeline]
     
-    style APPROVE_DEV fill:#fff7e6
     style APPROVE_QA fill:#fff7e6
-    style DEPLOY_DEV fill:#e6f7ff
     style DEPLOY_QA fill:#f0f5ff
-    style TEST_DEV fill:#f6ffed
     style TEST_QA fill:#f6ffed
     style SUCCESS fill:#d9f7be
     style FAIL_DEV fill:#ffccc7
@@ -753,10 +763,10 @@ The deployment workflow uses **two separate environments for each deployment tar
 
 | Environment Name | Type | Purpose | Contains |
 |-----------------|------|---------|----------|
-| `approve-apim-bpimb-dev` | Approval Gate | Pause before DEV deployment | Required reviewers only |
-| `apim-bpimb-dev` | Credential Store | Azure authentication | Secrets (Client ID, Subscription, etc.) |
 | `approve-apim-bpimb-qa` | Approval Gate | Pause before QA deployment | Required reviewers only |
 | `apim-bpimb-qa` | Credential Store | Azure authentication | Secrets (Client ID, Subscription, etc.) |
+| `approve-apim-bpimb-sb` | Approval Gate | Pause before Sandbox deployment | Required reviewers only |
+| `apim-bpimb-sb` | Credential Store | Azure authentication | Secrets (Client ID, Subscription, etc.) |
 
 **Why Two Environments Per Target?**
 
@@ -774,33 +784,35 @@ Without this separation, deployment jobs would need to reference the same enviro
 **Example from run-publisher.yaml**:
 ```yaml
 # Approval job - references approval environment
-approve-dev-deployment:
+approve-qa-deployment:
   runs-on: ubuntu-latest
   environment: 
-    name: approve-apim-bpimb-dev  # Contains reviewers, no secrets
+    name: approve-apim-bpimb-qa  # Contains reviewers, no secrets
   steps:
-    - name: DEV deployment approved
-      run: echo "Proceeding with DEV deployment..."
+    - name: QA deployment approved
+      run: echo "Proceeding with QA deployment..."
 
 # Deployment job - references credential environment via reusable workflow
-Deploy-To-DEV-With-Commit-ID:
-  needs: approve-dev-deployment
+Deploy-To-QA-With-Commit-ID:
+  needs: approve-qa-deployment
   uses: ./.github/workflows/run-publisher-with-env.yaml
   with:
-    API_MANAGEMENT_ENVIRONMENT: apim-bpimb-dev # Contains secrets, no reviewers
-    CONFIGURATION_YAML_PATH: configuration.dev.yaml
+    API_MANAGEMENT_ENVIRONMENT: apim-bpimb-qa # Contains secrets, no reviewers
+    CONFIGURATION_YAML_PATH: configuration.qa.yaml
   secrets: inherit
 ```
 
 **Configuration Steps**:
 
 1. **Create Approval Environments** (GitHub Settings → Environments):
-   - Create `approve-apim-bpimb-dev`
+   - Create `approve-apim-bpimb-qa`
+   - Create `approve-apim-bpimb-sb` (for Sandbox)
    - Add required reviewers (e.g., team leads)
    - ❌ Do NOT add any secrets
 
 2. **Create Credential Environments** (GitHub Settings → Environments):
-   - Create `apim-bpimb-dev`
+   - Create `apim-bpimb-qa`
+   - Create `apim-bpimb-sb` (for Sandbox)
    - Add Azure secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME`, `APIM_SUBSCRIPTION_KEY`
    - ❌ Do NOT add required reviewers
 
@@ -3049,7 +3061,7 @@ gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in
 **Tasks**:
 - [ ] Add environment reference table at top of README (after Overview section)
 - [ ] Include: GitHub environment name, APIM service name, resource group, purpose, network details
-- [ ] Document approval environments (approve-apim-bpimb-dev, approve-apim-bpimb-qa)
+- [ ] Document approval environments (approve-apim-bpimb-qa, approve-apim-bpimb-sb)
 - [ ] Clarify which secrets belong to which environment
 
 **Impact**: Reduces onboarding time, eliminates environment confusion, clearer documentation
@@ -3116,7 +3128,7 @@ gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in
 **Objective**: Explain why separate approval and credential environments exist
 
 **Background**:
-- Deployment pipeline uses 4 environments for 2 deployment targets (approve-apim-bpimb-dev, apim-bpimb-dev, approve-apim-bpimb-qa, apim-bpimb-qa)
+- Deployment pipeline uses 4 environments for 2 deployment targets (approve-apim-bpimb-qa, apim-bpimb-qa, approve-apim-bpimb-sb, apim-bpimb-sb)
 - Architecture decision (separate approval from credentials) prevents multiple approval prompts
 - Not documented why this separation is necessary
 
