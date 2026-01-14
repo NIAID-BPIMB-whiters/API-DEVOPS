@@ -1,0 +1,159 @@
+name: Promote from Sandbox to DEV
+
+on:
+  workflow_dispatch:
+    inputs:
+      API_NAMES:
+        description: 'API names (comma-separated) or "ALL"'
+        required: true
+        type: string
+      OVERWRITE_EXISTING:
+        description: 'Allow overwriting APIs in DEV?'
+        required: true
+        type: choice
+        default: 'false'
+        options:
+          - 'false'
+          - 'true'
+      COMMIT_TO_REPO:
+        description: 'Commit to repository?'
+        required: true
+        type: choice
+        default: 'true'
+        options:
+          - 'true'
+          - 'false'
+
+env:
+  apiops_release_version: v6.0.2
+
+jobs:
+  extract-from-sandbox:
+    name: Extract from Sandbox
+    runs-on: ubuntu-latest
+    environment: apim-bpimb-sb
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Create extraction config
+        run: |
+          if [ "${{ github.event.inputs.API_NAMES }}" = "ALL" ]; then
+            cat > extraction-config.yaml << 'EOF'
+          apimSpecification:
+            name: ${{ secrets.API_MANAGEMENT_SERVICE_NAME }}
+          apiSpecification:
+            format: OpenAPIV3Yaml
+          EOF
+          else
+            cat > extraction-config.yaml << 'EOF'
+          apimSpecification:
+            name: ${{ secrets.API_MANAGEMENT_SERVICE_NAME }}
+          apiSpecification:
+            format: OpenAPIV3Yaml
+          apis:
+          EOF
+            echo "${{ github.event.inputs.API_NAMES }}" | tr ',' '\n' | while read api; do
+              echo "  - name: $api" >> extraction-config.yaml
+            done
+          fi
+          cat extraction-config.yaml
+      
+      - name: Run extractor
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_RESOURCE_GROUP_NAME: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}
+          API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: ${{ github.workspace }}/extracted
+          CONFIGURATION_YAML_PATH: ${{ github.workspace }}/extraction-config.yaml
+        run: |
+          wget -O extractor.zip https://github.com/Azure/apiops/releases/download/${{ env.apiops_release_version }}/extractor-linux-x64.zip
+          unzip extractor.zip
+          chmod +x ./extractor
+          ./extractor
+      
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extracted-apis
+          path: extracted/
+          retention-days: 1
+
+  check-conflicts:
+    name: Check DEV conflicts
+    runs-on: ubuntu-latest
+    needs: extract-from-sandbox
+    environment: apim-bpimb-dev
+    if: github.event.inputs.OVERWRITE_EXISTING == 'false'
+    steps:
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      
+      - name: Check APIs
+        run: |
+          if [ "${{ github.event.inputs.API_NAMES }}" = "ALL" ]; then
+            exit 0
+          fi
+          
+          IFS=',' read -ra APIS <<< "${{ github.event.inputs.API_NAMES }}"
+          CONFLICTS=""
+          
+          for api in "${APIS[@]}"; do
+            api=$(echo "$api" | xargs)
+            if az apim api show --resource-group nih-niaid-azurestrides-dev-rg-apim-az --service-name niaid-bpimb-apim-dev --api-id "$api" 2>/dev/null; then
+              CONFLICTS="$CONFLICTS $api"
+            fi
+          done
+          
+          if [ -n "$CONFLICTS" ]; then
+            echo "ERROR: APIs exist in DEV:$CONFLICTS"
+            exit 1
+          fi
+
+  deploy-to-dev:
+    name: Deploy to DEV
+    runs-on: ubuntu-latest
+    needs: [extract-from-sandbox, check-conflicts]
+    if: always() && needs.extract-from-sandbox.result == 'success' && (needs.check-conflicts.result == 'success' || needs.check-conflicts.result == 'skipped')
+    environment: apim-bpimb-dev
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/download-artifact@v4
+        with:
+          name: extracted-apis
+          path: artifacts
+      
+      - name: Deploy
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_RESOURCE_GROUP_NAME: nih-niaid-azurestrides-dev-rg-apim-az
+          API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: ${{ github.workspace }}/artifacts
+          CONFIGURATION_YAML_PATH: ${{ github.workspace }}/configuration.dev.yaml
+        run: |
+          wget -O publisher.zip https://github.com/Azure/apiops/releases/download/${{ env.apiops_release_version }}/publisher-linux-x64.zip
+          unzip publisher.zip
+          chmod +x ./publisher
+          ./publisher
+      
+      - name: Commit to repo
+        if: github.event.inputs.COMMIT_TO_REPO == 'true'
+        run: |
+          [ -d "artifacts/apis" ] && cp -r artifacts/apis/* apimartifacts/apis/ || true
+          [ -d "artifacts/backends" ] && cp -r artifacts/backends/* apimartifacts/backends/ || true
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add apimartifacts/
+          
+          if ! git diff --staged --quiet; then
+            git commit -m "feat: Promote from Sandbox
+
+APIs: ${{ github.event.inputs.API_NAMES }}"
+            git push origin main
+          fi

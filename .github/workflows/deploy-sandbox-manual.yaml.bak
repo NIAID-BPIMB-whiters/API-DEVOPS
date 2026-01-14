@@ -1,4 +1,4 @@
-﻿name: Promote APIs from Sandbox to DEV
+name: Promote APIs from Sandbox to DEV
 
 # Promotes experimental APIs from Sandbox APIM to DEV APIM
 
@@ -124,20 +124,20 @@ jobs:
               --resource-group nih-niaid-azurestrides-dev-rg-apim-az \
               --service-name niaid-bpimb-apim-dev \
               --api-id "$api" 2>/dev/null; then
-              echo "  API '$api' already exists in DEV"
+              echo "⚠️  API '$api' already exists in DEV"
               CONFLICTS="$CONFLICTS $api"
             else
-              echo " API '$api' does not exist in DEV"
+              echo "✅ API '$api' does not exist in DEV"
             fi
           done
           
           if [ -n "$CONFLICTS" ]; then
-            echo " ERROR: The following APIs already exist in DEV:$CONFLICTS"
+            echo "❌ ERROR: The following APIs already exist in DEV:$CONFLICTS"
             echo "To overwrite, set OVERWRITE_EXISTING=true"
             exit 1
           fi
           
-          echo " No conflicts detected - safe to promote"
+          echo "✅ No conflicts detected - safe to promote"
 
   deploy-to-dev:
     name: Deploy to DEV
@@ -178,7 +178,7 @@ jobs:
           echo "Deploying to DEV APIM..."
           ./publisher
           
-          echo " Deployment complete"
+          echo "✅ Deployment complete"
       
       - name: Commit promoted APIs to repository
         if: github.event.inputs.COMMIT_TO_REPO == 'true'
@@ -224,7 +224,7 @@ Overwrite existing: ${{ github.event.inputs.OVERWRITE_EXISTING }}
 Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
             
             git push origin main
-            echo " Changes committed to repository"
+            echo "✅ Changes committed to repository"
           fi
       
       - name: Deployment Summary
@@ -244,4 +244,3 @@ Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{
             echo "- Changes NOT committed to repo - DEV only deployment" >> $GITHUB_STEP_SUMMARY
             echo "- Run extractor from DEV to capture in repository" >> $GITHUB_STEP_SUMMARY
           fi
-
