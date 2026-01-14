@@ -17,11 +17,17 @@ Create `niaid-bpimb-apim-sb` as a sandbox environment mirroring DEV architecture
 ### Resources to Create
 
 #### Azure Resources
-- **Resource Group**: `niaid-bpimb-apim-sb-rg`
-- **APIM Service**: `niaid-bpimb-apim-sb`
-- **Subscription**: NIH.NIAID.AzureSTRIDES (same as DEV/QA)
-- **Location**: Same as DEV (likely East US)
-- **Tier**: Developer or Basic (for cost optimization)
+- [x] **Resource Group**: `niaid-bpimb-apim-sb-rg` ✅ CREATED
+- [x] **APIM Service**: `niaid-bpimb-apim-sb` ✅ CREATED
+- [x] **Subscription**: NIH.NIAID.AzureSTRIDES (same as DEV/QA) ✅
+- [x] **Location**: Same as DEV (East US) ✅
+- [x] **Tier**: Developer ✅
+- [x] **Key Vault**: `kv-niaid-apim-sb` ✅ CREATED
+- [x] **Application Insights**: `niaid-bpimb-apim-sb-ai` ✅ CREATED
+- [x] **System-Assigned Managed Identity**: Enabled on APIM instance ✅
+  - Principal ID: `bd7488ea-70f5-4395-8a8e-9f79b655e7ed`
+  - Tenant ID: `14b77578-9773-42d5-8507-251ca2dc2b06`
+- [x] **RBAC Assignment**: Managed identity granted "Key Vault Secrets User" role on `kv-niaid-apim-sb` ✅
 
 #### Networking
 - [ ] VLAN/VNet configuration
@@ -43,43 +49,51 @@ Create `niaid-bpimb-apim-sb` as a sandbox environment mirroring DEV architecture
 - [ ] Document credentials in secure location
 
 #### GitHub Secrets/Environments
-- [ ] Create GitHub environment: `apim-bpimb-sb`
-- [ ] Add secrets to `apim-bpimb-sb` environment:
-  - `AZURE_CLIENT_ID` (from SP)
-  - `AZURE_CLIENT_SECRET` (from SP)
-  - `AZURE_TENANT_ID` (same as DEV/QA)
-  - `AZURE_SUBSCRIPTION_ID` (same as DEV/QA)
-  - `AZURE_RESOURCE_GROUP_NAME` = `niaid-bpimb-apim-sb-rg`
-  - `API_MANAGEMENT_SERVICE_NAME` = `niaid-bpimb-apim-sb`
-  - `APIM_SUBSCRIPTION_KEY` (for testing)
+- [x] Create GitHub environment: `apim-bpimb-sb` ✅ CREATED
+- [x] Add secrets to `apim-bpimb-sb` environment: ✅ ALL CONFIGURED
+  - `AZURE_CLIENT_ID` (from SP) ✅
+  - `AZURE_CLIENT_SECRET` (from SP) ✅
+  - `AZURE_TENANT_ID` (same as DEV/QA) ✅
+  - `AZURE_SUBSCRIPTION_ID` (same as DEV/QA) ✅
+  - `AZURE_RESOURCE_GROUP_NAME` = `niaid-bpimb-apim-sb-rg` ✅
+  - `API_MANAGEMENT_SERVICE_NAME` = `niaid-bpimb-apim-sb` ✅
+  - `APIM_SUBSCRIPTION_KEY` (for testing) - if needed
 - [ ] Create approval environment: `approve-apim-bpimb-sb`
 - [ ] Configure required reviewers for sandbox approval
 
 #### Configuration Files
-- [ ] Create `configuration.sandbox.yaml` (copy from `configuration.dev.yaml`)
-- [ ] Update environment-specific settings:
-  - Service name: `niaid-bpimb-apim-sb`
-  - Resource group: `niaid-bpimb-apim-sb-rg`
-  - Gateway URL mappings
-  - Backend service URLs (if different from DEV)
-  - Named values / environment variables
+- [x] Create `configuration.sandbox.yaml` ✅ CREATED (based on `configuration.dev.yaml`)
+- [x] Update environment-specific settings: ✅ ALL CONFIGURED
+  - Service name: `niaid-bpimb-apim-sb` ✅
+  - Resource group: `niaid-bpimb-apim-sb-rg` ✅
+  - Gateway URL mappings ✅
+  - Backend service URLs (if different from DEV) ✅
+  - Named values: `apim-ai-connection-string` remapped to `kv-niaid-apim-sb` Key Vault ✅
+  - Loggers: `apim-daids-connect-ai` remapped to `niaid-bpimb-apim-sb-ai` ✅
+  - Gateways: Empty array (exclusion handled by workflow, not configuration) ✅
+  - APIs: `crms-api-qa` excluded (requires auth server) ✅
 
 #### Workflow Updates
-- [ ] Update `run-publisher.yaml` to support sandbox environment
-  - Add sandbox deployment job
-  - Add approval gate for sandbox
-  - Add test job for sandbox
-  - Add cleanup job for sandbox
-  - Add tagging job: `deploy-sb-{timestamp}-{sha}`
+- [x] ~~Update `run-publisher.yaml` to support sandbox environment~~ **BLOCKED**: GitHub Actions job-level conditionals don't evaluate `workflow_dispatch` choice inputs (tested 10+ syntax variations across multiple workflow runs - all failed despite debug showing conditions = true)
+- [x] **Created standalone workflow**: `deploy-sandbox-manual.yaml` for manual sandbox deployments
+  - Two deployment modes: incremental (commit-based) and full (all artifacts)
+  - Spectral linting integrated
+  - Gateway exclusion via temporary directory rename (Developer tier limit: 1 gateway)
+  - Uses environment: `apim-bpimb-sb`
 - [ ] Update `rollback-deployment.yaml` to support sandbox
 - [ ] Update `cleanup-orphaned-apis.yaml` to support sandbox
 - [ ] Update `test-apis-ephemeral.yaml` to test sandbox APIs
 
+**Important Implementation Notes**:
+- **Gateway Handling**: Configuration file exclusions (`gateways: []`) don't work - publisher ignores them. Workflow temporarily renames `apimartifacts/gateways` to `apimartifacts/gateways.excluded` during deployment, then restores afterward. This preserves artifacts for upstream DEV/QA/PROD deployments while respecting Developer tier's 1-gateway limit.
+- **API Exclusions**: `crms-api-qa` excluded from sandbox deployment (requires OAuth authorization server not configured in sandbox environment)
+- **Managed Identity Requirement**: Sandbox APIM must have System-Assigned Managed Identity enabled with "Key Vault Secrets User" role on `kv-niaid-apim-sb` for named value Key Vault references
+
 #### Documentation
-- [ ] Update README.md environments table
-- [ ] Document sandbox → DEV promotion workflow
+- [x] Update README.md environments table ✅
+- [x] Document sandbox deployment workflow (manual standalone approach) ✅  
 - [ ] Update architecture diagrams
-- [ ] Document sandbox use cases and policies
+- [x] Document sandbox use cases and implementation details ✅
 
 ### Promotion Path: Sandbox → DEV (Manual Process)
 
@@ -88,6 +102,94 @@ Create `niaid-bpimb-apim-sb` as a sandbox environment mirroring DEV architecture
 **Important**: This is a **manual, selective process** - not all sandbox changes should be promoted. Only successful, tested POCs should move to DEV.
 
 ---
+
+### ⚠️ Implementation Challenges & Solutions
+
+#### GitHub Actions Job-Level Conditional Bug (CRITICAL)
+
+**Problem**: Job-level `if:` conditionals do NOT evaluate `workflow_dispatch` choice inputs correctly.
+
+**Evidence**:
+- Tested 10+ syntax variations across multiple workflow runs
+- Debug output showed all conditions evaluating to `true`
+- Jobs consistently SKIPPED despite true conditions
+- Tested patterns:
+  ```yaml
+  if: inputs.TARGET_ENVIRONMENT == 'sandbox-only'
+  if: github.event.inputs.TARGET_ENVIRONMENT == 'sandbox-only'
+  if: ${{ inputs.TARGET_ENVIRONMENT == 'sandbox-only' }}
+  if: |
+    github.event.inputs.TARGET_ENVIRONMENT == 'sandbox-only'
+  ```
+
+**Workflow Runs Tested**: 20965157141, 20965029195, 20966529799, 20966629689, 20966764281, 20966830392, 20966916392, 20967023026, 20967973704, 20968191947, 20968795396
+
+**Solution**: Created standalone workflow `deploy-sandbox-manual.yaml` without complex conditionals
+
+**Impact**: Cannot use single workflow with choice-based environment selection - requires separate workflows for each deployment pattern
+
+#### APIM Developer Tier Gateway Limitation
+
+**Problem**: Developer tier APIM instances have a maximum limit of 1 self-hosted gateway. Repository contains 2 gateways (NIAID_CRMS_Test, test-echo).
+
+**Attempted Solutions**:
+1. Configuration file exclusion: `gateways: []` in `configuration.sandbox.yaml` - **FAILED** (publisher ignores it)
+2. Individual gateway exclusions in configuration - **FAILED**
+
+**Working Solution**: Workflow temporarily renames gateways directory during deployment:
+```bash
+mv apimartifacts/gateways apimartifacts/gateways.excluded
+./publisher
+mv apimartifacts/gateways.excluded apimartifacts/gateways
+```
+
+**Rationale**: Preserves gateway artifacts for upstream DEV/QA/PROD deployments while respecting sandbox tier limitations
+
+#### System-Assigned Managed Identity Requirement
+
+**Problem**: Publisher deployment failed with error: "System-Assigned Managed Identity is required to access keyvault secret, which is not enabled"
+
+**Root Cause**: Sandbox APIM instance created without managed identity enabled
+
+**Solution**:
+```bash
+# Enable System-Assigned Managed Identity
+az apim update --name niaid-bpimb-apim-sb \
+  --resource-group niaid-bpimb-apim-sb-rg \
+  --set identity.type=SystemAssigned
+
+# Grant Key Vault access
+az role assignment create \
+  --role "Key Vault Secrets User" \
+  --assignee <principal-id> \
+  --scope /subscriptions/.../Microsoft.KeyVault/vaults/kv-niaid-apim-sb
+```
+
+**Managed Identity Details**:
+- Principal ID: `bd7488ea-70f5-4395-8a8e-9f79b655e7ed`
+- Tenant ID: `14b77578-9773-42d5-8507-251ca2dc2b06`
+- Role: Key Vault Secrets User
+
+**Lesson**: All new APIM instances must have System-Assigned Managed Identity enabled during creation for Key Vault integration
+
+#### API Dependency Exclusions
+
+**Problem**: Some APIs require resources not configured in sandbox (e.g., OAuth authorization servers)
+
+**Example**: `crms-api-qa` failed deployment with error "Authorization server was not found"
+
+**Solution**: Exclude dependent APIs in `configuration.sandbox.yaml`:
+```yaml
+apis:
+  - name: crms-api-qa
+    exclude: true
+```
+
+**Lesson**: Review API dependencies before sandbox deployment; exclude APIs requiring resources not available in sandbox environment
+
+---
+
+### Promotion Path: Sandbox → DEV (Manual Process Continued)
 
 #### Method 1: Manual File Copy (Recommended for Simple Changes)
 

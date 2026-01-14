@@ -20,6 +20,7 @@
   - [Email Notifications Setup](#email-notifications-setup)
   - [1. Extract Artifacts](#1-extract-artifacts-run-extractoryaml)
   - [2. Publish to DEV and QA](#2-publish-to-dev-and-qa-run-publisheryaml)
+  - [2b. Deploy to Sandbox](#2b-deploy-to-sandbox-deploy-sandbox-manualyaml)
   - [3. Reusable Publisher](#3-reusable-publisher-run-publisher-with-envyaml)
   - [4. API Testing](#4-api-testing-test-apisyaml)
   - [5. Ephemeral VM Testing](#5-ephemeral-vm-testing-test-apis-ephemeralyaml)
@@ -31,6 +32,7 @@
 - [Configuration Files](#configuration-files)
   - [configuration.extractor.yaml](#configurationextractoryaml)
   - [configuration.dev.yaml and configuration.qa.yaml](#configurationdevyaml-and-configurationqayaml)
+  - [configuration.sandbox.yaml](#configurationsandboxyaml)
   - [Cross-Environment Resource Mapping Strategy](#cross-environment-resource-mapping-strategy)
 - [Development Workflow](#development-workflow)
 - [Deployment Architecture](#deployment-architecture)
@@ -180,17 +182,15 @@ gh workflow run run-extractor.yaml
 ### Deploy to Sandbox (Manual POC Workflow)
 ```bash
 # Deploy all artifacts from repository to Sandbox
-gh workflow run run-publisher.yaml \
-  -f TARGET_ENVIRONMENT=sandbox-only \
+gh workflow run deploy-sandbox-manual.yaml \
   -f COMMIT_ID_CHOICE=publish-all-artifacts-in-repo
 
 # Deploy only changed artifacts (incremental)
-gh workflow run run-publisher.yaml \
-  -f TARGET_ENVIRONMENT=sandbox-only \
+gh workflow run deploy-sandbox-manual.yaml \
   -f COMMIT_ID_CHOICE=publish-artifacts-in-last-commit
 
 # Monitor deployment
-gh run list --workflow=run-publisher.yaml --limit 1
+gh run list --workflow=deploy-sandbox-manual.yaml --limit 1
 gh run watch <run-id>
 ```
 
@@ -239,8 +239,9 @@ git push origin main
 API-DEVOPS/
 ├── .github/
 │   └── workflows/                           # GitHub Actions workflows
-│       ├── run-extractor.yaml              # Extract artifacts from DEV APIM
-│       ├── run-publisher.yaml              # Deploy artifacts to PROD APIM
+│       ├── run-extractor.yaml              # Extract artifacts from APIM instances
+│       ├── run-publisher.yaml              # Deploy artifacts to DEV and QA APIM
+│       ├── deploy-sandbox-manual.yaml      # Manual deployment to Sandbox APIM
 │       ├── run-publisher-with-env.yaml     # Reusable deployment workflow
 │       ├── test-apis.yaml                  # API testing (standard)
 │       ├── test-apis-ephemeral.yaml        # API testing (ephemeral VM approach)
@@ -507,34 +508,16 @@ gh workflow run run-extractor.yaml -f CONFIGURATION_YAML_PATH="configuration.ext
 
 ### 2. Publish to DEV and QA (`run-publisher.yaml`)
 
-**Purpose**: Deploy artifacts from repository to DEV, QA, and Sandbox APIM environments
+**Purpose**: Deploy artifacts from repository to DEV and QA APIM environments
 
 **Trigger**: 
-- Push to `main` branch (automatic DEV → QA pipeline only)
-- Manual workflow dispatch (supports Sandbox deployment)
+- Push to `main` branch (automatic DEV → QA pipeline)
+- Manual workflow dispatch
 
 **Pipeline Flow**:
 ```
-# Automatic (on push to main):
-Git Repository (apimartifacts/) → Publisher Tool → DEV APIM → Test DEV → QA APIM → Test QA
-
-# Manual (sandbox only):
-Git Repository (apimartifacts/) → Publisher Tool → Sandbox APIM
+Git Repository (apimartifacts/) → Publisher Tool → DEV APIM → Approve → QA APIM
 ```
-
-**Target Environment Options**:
-
-1. **dev-and-qa** (default):
-   - Deploys to DEV, then QA (automatic pipeline)
-   - Requires approval gates
-   - Triggers post-deployment testing
-   - Available on push or manual dispatch
-
-2. **sandbox-only**:
-   - Deploys only to Sandbox APIM
-   - Manual dispatch only (no auto-deploy on push)
-   - No approval gates or automated tests
-   - For POC/experimental development
 
 **Deployment Modes**:
 
@@ -547,6 +530,53 @@ Git Repository (apimartifacts/) → Publisher Tool → Sandbox APIM
    - Redeploys all artifacts in repository
    - Used for disaster recovery or after build failures
    - Select "publish-all-artifacts-in-repo" option
+
+**Approval Gates**:
+- DEV deployment: Uses `approve-apim-bpimb-dev` environment with required reviewers
+- QA deployment: Uses `approve-apim-bpimb-qa` environment with required reviewers
+
+**Post-Deployment**:
+- Creates deployment tags: `deploy-dev-{timestamp}-{sha}`, `deploy-qa-{timestamp}-{sha}`
+- Enables rollback to any previous deployment
+
+---
+
+### 2b. Deploy to Sandbox (`deploy-sandbox-manual.yaml`)
+
+**Purpose**: Manual deployment to Sandbox APIM for POC/experimental work
+
+**Trigger**: Manual workflow dispatch only
+
+**Pipeline Flow**:
+```
+Git Repository (apimartifacts/) → Publisher Tool → Sandbox APIM (niaid-bpimb-apim-sb)
+```
+
+**Key Features**:
+- **Gateway Exclusion**: Temporarily renames `gateways/` directory during deployment (Developer tier limit: 1 gateway)
+- **API Exclusions**: Automatically excludes APIs requiring resources not in sandbox (e.g., `crms-api-qa`)
+- **No Approval Gates**: Direct deployment for rapid iteration
+- **Environment**: Uses `apim-bpimb-sb` GitHub environment
+
+**Deployment Modes**:
+1. **Incremental**: Deploys only changes from last commit
+2. **Full**: Deploys all artifacts (except excluded gateways and APIs)
+
+**Usage**:
+```bash
+# Full deployment to sandbox
+gh workflow run deploy-sandbox-manual.yaml \
+  -f COMMIT_ID_CHOICE=publish-all-artifacts-in-repo
+
+# Incremental deployment
+gh workflow run deploy-sandbox-manual.yaml \
+  -f COMMIT_ID_CHOICE=publish-artifacts-in-last-commit
+```
+
+**Important Notes**:
+- Sandbox uses `configuration.sandbox.yaml` for environment-specific settings
+- Gateway artifacts preserved in repository for upstream DEV/QA/PROD deployments
+- Successful sandbox POCs should be promoted to DEV via manual PR process
 
 ### Deployment Modes Explained
 
@@ -774,23 +804,15 @@ git push origin main
 
 # Manual DEV → QA deployment (full redeployment)
 gh workflow run run-publisher.yaml \
-  -f TARGET_ENVIRONMENT=dev-and-qa \
   -f COMMIT_ID_CHOICE=publish-all-artifacts-in-repo
 
 # Manual DEV → QA deployment (incremental)
 gh workflow run run-publisher.yaml \
-  -f TARGET_ENVIRONMENT=dev-and-qa \
   -f COMMIT_ID_CHOICE=publish-artifacts-in-last-commit
 
-# Deploy to Sandbox only (full redeployment)
-gh workflow run run-publisher.yaml \
-  -f TARGET_ENVIRONMENT=sandbox-only \
+# Deploy to Sandbox (use standalone workflow)
+gh workflow run deploy-sandbox-manual.yaml \
   -f COMMIT_ID_CHOICE=publish-all-artifacts-in-repo
-
-# Deploy to Sandbox only (incremental)
-gh workflow run run-publisher.yaml \
-  -f TARGET_ENVIRONMENT=sandbox-only \
-  -f COMMIT_ID_CHOICE=publish-artifacts-in-last-commit
 ```
 
 ---
@@ -1899,6 +1921,61 @@ apis:
 - Diagnostic configuration overrides
 - Named value configuration
 
+---
+
+### `configuration.sandbox.yaml`
+
+Controls deployments to Sandbox APIM for POC/experimental work.
+
+```yaml
+apimServiceName: niaid-bpimb-apim-sb  # Sandbox APIM instance
+
+namedValues:
+  # Remap Key Vault references to Sandbox Key Vault
+  - name: apim-ai-connection-string
+    properties:
+      keyVault:
+        secretIdentifier: https://kv-niaid-apim-sb.vault.azure.net/secrets/apim-ai-connection-string
+
+loggers:
+  # Remap logger to Sandbox Application Insights
+  - name: apim-daids-connect-ai
+    properties:
+      resourceId: /subscriptions/.../microsoft.insights/components/niaid-bpimb-apim-sb-ai
+      credentials:
+        connectionString: "{{apim-ai-connection-string}}"
+
+gateways: []  # Empty array (actual exclusion handled by workflow)
+
+apis:
+  # Exclude APIs requiring resources not available in sandbox
+  - name: crms-api-qa
+    exclude: true  # Requires OAuth authorization server
+```
+
+**Features**:
+- Sandbox-specific Key Vault and Application Insights mapping
+- API exclusions for dependencies not configured in sandbox
+- Gateway exclusions (Developer tier limit: 1 gateway, handled by workflow)
+
+**Important Implementation Notes**:
+- **Gateway handling**: Configuration file `gateways: []` doesn't work - publisher ignores it. The `deploy-sandbox-manual.yaml` workflow temporarily renames the gateways directory during deployment.
+- **System-Assigned Managed Identity required**: Sandbox APIM must have managed identity enabled with "Key Vault Secrets User" role on `kv-niaid-apim-sb`
+- **Tier limitations**: Developer tier supports max 1 self-hosted gateway
+
+---
+
+### Configuration File Comparison
+
+| Feature | configuration.extractor.yaml | configuration.dev.yaml / qa.yaml | configuration.sandbox.yaml |
+|---------|------------------------------|----------------------------------|---------------------------|
+| **Purpose** | Control what's extracted | Control DEV/QA deployment | Control Sandbox deployment |
+| **APIM Target** | niaid-daids-connect-apim (source) | niaid-bpimb-apim-dev/qa | niaid-bpimb-apim-sb |
+| **Key Vault** | N/A | kv-niaid-bpimb-apim-dev/qa | kv-niaid-apim-sb |
+| **App Insights** | N/A | niaid-bpimb-apim-dev-ai/qa-ai | niaid-bpimb-apim-sb-ai |
+| **Gateway Support** | Yes | Yes | No (Developer tier limit) |
+| **API Exclusions** | Selection only | Override configs | Dependency-based exclusions |
+
 **Important Notes**:
 - ⚠️ **SOAP/WSDL APIs NOT SUPPORTED** by Azure APIops v6.0.2
 - SOAP APIs must be managed manually via Azure Portal
@@ -2407,6 +2484,67 @@ For service principals used in GitHub Actions workflows:
 ---
 
 ## Troubleshooting
+
+### Sandbox Deployment Issues
+
+**Issue**: Sandbox deployment fails with "System-Assigned Managed Identity is required to access keyvault secret"
+
+**Root Cause**: APIM instance missing managed identity for Key Vault access
+
+**Solution**:
+```bash
+# Enable System-Assigned Managed Identity on APIM
+az apim update --name niaid-bpimb-apim-sb \
+  --resource-group niaid-bpimb-apim-sb-rg \
+  --set identity.type=SystemAssigned
+
+# Get the principal ID from output
+PRINCIPAL_ID=$(az apim show --name niaid-bpimb-apim-sb \
+  --resource-group niaid-bpimb-apim-sb-rg \
+  --query identity.principalId -o tsv)
+
+# Grant Key Vault Secrets User role
+az role assignment create \
+  --role "Key Vault Secrets User" \
+  --assignee $PRINCIPAL_ID \
+  --scope /subscriptions/<subscription-id>/resourceGroups/niaid-bpimb-apim-sb-rg/providers/Microsoft.KeyVault/vaults/kv-niaid-apim-sb
+```
+
+**Issue**: Sandbox deployment fails with "You've reached the maximum number of Gateways (1) in Service"
+
+**Root Cause**: Developer tier APIM instances support only 1 self-hosted gateway
+
+**Solution**: This is handled automatically by the `deploy-sandbox-manual.yaml` workflow, which temporarily renames the `gateways` directory during deployment. If you encounter this error:
+- Verify you're using `deploy-sandbox-manual.yaml` workflow (not `run-publisher.yaml`)
+- Check that the gateway exclusion logic in the workflow is intact
+- Gateway artifacts are preserved in repository for upstream DEV/QA/PROD deployments
+
+**Issue**: API deployment fails with "Authorization server was not found"
+
+**Root Cause**: Some APIs require OAuth authorization servers not configured in sandbox
+
+**Solution**: Exclude dependent APIs in `configuration.sandbox.yaml`:
+```yaml
+apis:
+  - name: crms-api-qa
+    exclude: true
+```
+
+**Issue**: Workflow dispatch with `TARGET_ENVIRONMENT` parameter doesn't work
+
+**Root Cause**: GitHub Actions bug - job-level `if:` conditionals don't evaluate `workflow_dispatch` choice inputs
+
+**Solution**: Use the dedicated `deploy-sandbox-manual.yaml` workflow instead of trying to add sandbox to `run-publisher.yaml`
+
+**Issue**: Missing `AZURE_RESOURCE_GROUP_NAME` configuration error
+
+**Root Cause**: Environment variable not set in GitHub environment
+
+**Solution**: Add to GitHub environment `apim-bpimb-sb` secrets:
+- Secret name: `AZURE_RESOURCE_GROUP_NAME`
+- Value: `niaid-bpimb-apim-sb-rg`
+
+---
 
 ### Extractor Workflow Fails
 
