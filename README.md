@@ -2658,6 +2658,137 @@ gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in
 
 ## TODO / Roadmap
 
+### External Review Feedback (Microsoft - January 13, 2026)
+
+**Reviewer**: Chris Boretos (Microsoft APIOps Specialist)  
+**Assessment**: "Enterprise-grade implementation, better than most Federal customers"
+
+**Recommended Enhancements**:
+
+#### 1. Pre-merge OpenAPI Diff Summary
+**Priority**: High  
+**Status**: 📋 Planned  
+**Effort**: Medium
+
+**Objective**: Automatically generate PR comments showing API changes before merge
+
+**Implementation**:
+- Use tools like [openapi-diff](https://github.com/OpenAPITools/openapi-diff) or [oasdiff](https://github.com/Tufin/oasdiff)
+- Generate diff summary as PR comment showing:
+  - New/removed endpoints
+  - Breaking changes (removed fields, changed types)
+  - Non-breaking changes (new optional fields)
+  - Schema changes
+- Benefits:
+  - Dramatically improves reviewer effectiveness
+  - Catches breaking changes before deployment
+  - Provides clear change documentation
+  - Enables better informed approval decisions
+
+**Tasks**:
+- [ ] Research openapi-diff vs oasdiff vs swagger-diff
+- [ ] Add diff generation step to run-extractor.yaml workflow
+- [ ] Configure GitHub API to post diff as PR comment
+- [ ] Add breaking change detection rules
+- [ ] Document diff interpretation guidelines
+- [ ] Test with real API changes
+
+---
+
+#### 2. Canary / Selective API Deployment
+**Priority**: Medium  
+**Status**: 💡 Future Enhancement  
+**Effort**: High
+
+**Objective**: Deploy specific APIs independently to reduce blast radius
+
+**Current State**:
+- ✅ Already support incremental (changed APIs) vs full deployment
+- ✅ Configuration files support API-specific overrides
+
+**Future Enhancement**:
+- Add workflow input to deploy only specific API(s):
+  ```yaml
+  inputs:
+    DEPLOY_MODE:
+      - all-apis              # Current behavior
+      - changed-apis-only     # Current behavior
+      - specific-apis-only    # NEW
+    API_NAMES:
+      description: 'Comma-separated API names (when DEPLOY_MODE=specific-apis-only)'
+  ```
+
+**Benefits**:
+- Reduced blast radius for large repositories
+- Faster deployments for single API changes
+- Better isolation for high-risk API updates
+- Supports gradual rollout strategies
+
+**Tasks**:
+- [ ] Design workflow input structure
+- [ ] Modify publisher to accept API filter list
+- [ ] Add validation for API name inputs
+- [ ] Update deployment tagging to include API scope
+- [ ] Test selective deployment scenarios
+- [ ] Document use cases and best practices
+
+---
+
+#### 3. Explicit "Portal Lock" Policy
+**Priority**: High  
+**Status**: ⚠️ Documentation Needed  
+**Effort**: Low
+
+**Objective**: Document and enforce GitOps-only policy for DEV/QA environments
+
+**Current Reality** (implicit):
+- Portal changes allowed only in DAIDS_DEV (extraction source)
+- DEV/QA portal edits are overwritten by Git on next deployment
+- No technical enforcement, only practice
+
+**Needed**:
+- **Document the policy explicitly** in README and ARCHITECTURE docs
+- Make it clear to all team members and API developers
+- Consider technical enforcement options:
+  - Azure RBAC: Restrict portal write access to DEV/QA APIM instances
+  - Monitoring: Alert on out-of-band portal changes
+  - Validation: Compare APIM state vs Git state periodically
+
+**Policy Statement (Draft)**:
+```
+PORTAL LOCK POLICY - GitOps Enforcement
+
+✅ DAIDS_DEV (apim-daids-connect):
+   - Portal changes ALLOWED
+   - Primary source for extractions
+   - Changes flow to Git → DEV → QA
+
+❌ DEV (niaid-bpimb-apim-dev):
+   - Portal changes PROHIBITED
+   - Managed exclusively via GitOps
+   - Manual changes will be OVERWRITTEN
+
+❌ QA (niaid-bpimb-apim-qa):
+   - Portal changes PROHIBITED
+   - Managed exclusively via GitOps
+   - Manual changes will be OVERWRITTEN
+
+⚠️ Sandbox (niaid-bpimb-apim-sb):
+   - Portal changes ALLOWED (POC/experimentation)
+   - Manual promotion to DEV via PR (not extraction)
+```
+
+**Tasks**:
+- [x] Draft policy statement
+- [ ] Add policy section to README (under Development Workflow)
+- [ ] Add policy to ARCHITECTURE-CHANGES-JAN2026.md
+- [ ] Create CONTRIBUTING.md with policy guidelines
+- [ ] Communicate policy to all API developers
+- [ ] Consider RBAC restrictions on DEV/QA portals
+- [ ] Add drift detection workflow (compare APIM state vs Git)
+
+---
+
 ### 1. Filter Non-Current API Versions on Extraction
 **Priority**: Medium  
 **Status**: ⏳ Pending - **NOT SUPPORTED BY APIops v6.0.2**  

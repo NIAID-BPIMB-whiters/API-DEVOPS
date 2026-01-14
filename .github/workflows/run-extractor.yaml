@@ -1,12 +1,22 @@
 name: Run - Extractor
 
-# PIPELINE: DEV → Repository → PRODUCTION
-# This workflow extracts APIM artifacts from DEV environment (nih-niaid-avidpoc-dev-rg)
-# Extracted artifacts are stored in apimartifacts/ folder for deployment to PRODUCTION
+# PIPELINE: DEV → Repository → QA → PROD
+# This workflow extracts APIM artifacts from selected source environment
+# Default: niaid-bpimb-apim-dev (DEV) for DEV → QA → PROD pipeline
+# Also supports: apim-daids-connect (DAIDS legacy), niaid-bpimb-apim-sb (Sandbox comparison)
 
 on:
   workflow_dispatch:
     inputs:
+      SOURCE_ENVIRONMENT:
+        description: 'Source APIM environment to extract from'
+        required: true
+        type: choice
+        default: 'apim-bpimb-dev'
+        options:
+          - apim-bpimb-dev       # DEV (default) - Primary extraction source for DEV → QA → PROD pipeline
+          - apim-daids-connect   # DAIDS - Legacy extraction for comparison/audit
+          - apim-bpimb-sb        # Sandbox - For troubleshooting/comparison (not for promotion)
       CONFIGURATION_YAML_PATH:
         description: 'Choose Wether to extract all Apis or extract apis listed an extraction configuration file'     
         required: true
@@ -21,7 +31,7 @@ env:
 jobs:
   extract:
     runs-on: ubuntu-latest
-    environment: apim-daids-connect # Extractor source: apim-daids-connect
+    environment: ${{ github.event.inputs.SOURCE_ENVIRONMENT }}
     steps:
       - uses: actions/checkout@v4
       
@@ -38,7 +48,8 @@ jobs:
           RG="${{ secrets.AZURE_RESOURCE_GROUP_NAME }}"
           APIM="${{ secrets.API_MANAGEMENT_SERVICE_NAME }}"
           SUB="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-          echo "Extracting from:"
+          ENV="${{ github.event.inputs.SOURCE_ENVIRONMENT }}"
+          echo "Extracting from environment: $ENV"
           echo "  Resource Group length: ${#RG}"
           echo "  APIM Service length: ${#APIM}"
           echo "  Subscription length: ${#SUB}"
