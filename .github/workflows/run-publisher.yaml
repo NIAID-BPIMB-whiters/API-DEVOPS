@@ -26,21 +26,7 @@ on:
           - "publish-all-artifacts-in-repo"
 
 jobs:
-  # Manual approval gate before DEV deployment
-  approve-dev-deployment:
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    environment: 
-      name: approve-apim-bpimb-dev  # Create this environment with required reviewers
-    steps:
-      - name: DEV deployment approved
-        run: echo "Proceeding with DEV deployment..."
-
   get-commit:
-    needs: [approve-dev-deployment]
-    if: |
-      always() && 
-      (needs.approve-dev-deployment.result == 'success' || needs.approve-dev-deployment.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       # Set the COMMIT_ID env variable
@@ -50,193 +36,10 @@ jobs:
     outputs:
       commit_id: ${{ steps.commit.outputs.commit_id }}
 
-  #Deploy to DEV with Commit ID (only changed artifacts from last commit)
-  # Pipeline: DAIDS_DEV → Repository → DEV → QA
-  Deploy-To-DEV-With-Commit-ID:
-    if: (github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.event.inputs.COMMIT_ID_CHOICE == 'publish-artifacts-in-last-commit')
-    needs: get-commit
-    uses: ./.github/workflows/run-publisher-with-env.yaml
-    with:
-      API_MANAGEMENT_ENVIRONMENT: apim-bpimb-dev # Deploys to DEV APIM service (niaid-bpimb-apim-dev)
-      COMMIT_ID: ${{ needs.get-commit.outputs.commit_id }}
-      CONFIGURATION_YAML_PATH: configuration.dev.yaml # DEV deployment configuration
-      API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts # Artifacts extracted from DAIDS_DEV environment
-    secrets: inherit
-
-  #Deploy to DEV without Commit ID (all artifacts in repo)
-  # Use this option for full redeployment of all artifacts to DEV
-  Deploy-To-DEV-Without-Commit-ID:
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.COMMIT_ID_CHOICE == 'publish-all-artifacts-in-repo'
-    needs: get-commit
-    uses: ./.github/workflows/run-publisher-with-env.yaml
-    with:
-      API_MANAGEMENT_ENVIRONMENT: apim-bpimb-dev # Deploys to DEV APIM service (niaid-bpimb-apim-dev)
-      CONFIGURATION_YAML_PATH: configuration.dev.yaml # DEV deployment configuration
-      API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts # All artifacts extracted from DAIDS_DEV environment
-    secrets: inherit
-
-  # Run full test suite on DEV after successful deployment
-  Test-DEV-After-Deploy:
-    needs: [Deploy-To-DEV-With-Commit-ID, Deploy-To-DEV-Without-Commit-ID]
-    if: always() && (needs.Deploy-To-DEV-With-Commit-ID.result == 'success' || needs.Deploy-To-DEV-Without-Commit-ID.result == 'success')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Trigger and wait for API tests in DEV
-        run: |
-          # Trigger the test workflow
-          gh workflow run test-apis-ephemeral.yaml \
-            -f ENVIRONMENT=apim-bpimb-dev \
-            -f TEST_TYPE=full-suite \
-            --repo ${{ github.repository }}
-          
-          # Wait for workflow to start (max 30 seconds)
-          echo "Waiting for test workflow to start..."
-          for i in {1..30}; do
-            RUN_ID=$(gh run list --workflow=test-apis-ephemeral.yaml --repo ${{ github.repository }} --limit 1 --json databaseId --jq '.[0].databaseId')
-            if [ -n "$RUN_ID" ]; then
-              echo "Test workflow started with ID: $RUN_ID"
-              break
-            fi
-            sleep 1
-          done
-          
-          # Wait for the workflow to complete (max 10 minutes)
-          if [ -n "$RUN_ID" ]; then
-            echo "Waiting for test workflow to complete..."
-            gh run watch $RUN_ID --repo ${{ github.repository }} --exit-status
-          else
-            echo "Error: Test workflow did not start"
-            exit 1
-          fi
-        env:
-          GH_TOKEN: ${{ github.token }}
-  
-  # Tag successful DEV deployment for rollback capability
-  Tag-DEV-Deployment:
-    needs: [get-commit, Test-DEV-After-Deploy]
-    if: always() && needs.Test-DEV-After-Deploy.result == 'success'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      
-      - name: Create deployment tag
-        run: |
-          # Generate tag name with timestamp and short SHA
-          TIMESTAMP=$(date -u +%Y%m%d-%H%M%S)
-          SHORT_SHA=$(git rev-parse --short ${{ needs.get-commit.outputs.commit_id }})
-          TAG_NAME="deploy-dev-${TIMESTAMP}-${SHORT_SHA}"
-          
-          # Create annotated tag with deployment metadata
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          git tag -a "$TAG_NAME" ${{ needs.get-commit.outputs.commit_id }} -m "DEV deployment - $(date -u '+%Y-%m-%d %H:%M:%S UTC')" \
-            -m "Deployed by: ${{ github.actor }}" \
-            -m "Workflow: ${{ github.run_id }}" \
-            -m "Tests: Passed"
-          
-          git push origin "$TAG_NAME"
-          
-          echo "✅ Created deployment tag: $TAG_NAME" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Use this tag for rollback:" >> $GITHUB_STEP_SUMMARY
-          echo '```bash' >> $GITHUB_STEP_SUMMARY
-          echo "gh workflow run rollback-deployment.yaml -f ENVIRONMENT=apim-bpimb-dev -f ROLLBACK_TARGET=$TAG_NAME" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-  
-  # Cleanup orphaned APIs in DEV after successful deployment
-  Cleanup-DEV-Orphaned-APIs:
-    needs: Tag-DEV-Deployment
-    if: always() && needs.Tag-DEV-Deployment.result == 'success'
-    runs-on: ubuntu-latest
-    environment: apim-bpimb-dev
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      
-      - name: Azure Login
-        env:
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        run: |
-          az login --service-principal \
-            --username "$AZURE_CLIENT_ID" \
-            --password "$AZURE_CLIENT_SECRET" \
-            --tenant "$AZURE_TENANT_ID"
-          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
-      
-      - name: Identify and delete orphaned APIs
-        env:
-          API_MANAGEMENT_SERVICE_NAME: ${{ secrets.API_MANAGEMENT_SERVICE_NAME }}
-          AZURE_RESOURCE_GROUP_NAME: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}
-        run: |
-          echo "Checking for orphaned APIs in DEV..."
-          
-          # Get APIs from repository
-          REPO_APIS=$(find apimartifacts/apis -maxdepth 1 -mindepth 1 -type d -exec basename {} \; | sort)
-          echo "$REPO_APIS" > repo-apis.txt
-          
-          # Get current APIs from APIM
-          APIM_APIS=$(az apim api list \
-            --resource-group "$AZURE_RESOURCE_GROUP_NAME" \
-            --service-name "$API_MANAGEMENT_SERVICE_NAME" \
-            --query "[?isCurrent==\`true\`].name" \
-            -o tsv | sort)
-          echo "$APIM_APIS" > apim-apis.txt
-          
-          # Find orphaned APIs (in APIM but not in repo)
-          ORPHANED=$(comm -13 repo-apis.txt apim-apis.txt)
-          
-          if [ -z "$ORPHANED" ]; then
-            echo "✅ No orphaned APIs found in DEV"
-            echo "## ✅ DEV API Cleanup" >> $GITHUB_STEP_SUMMARY
-            echo "No orphaned APIs found. Environment is in sync with repository." >> $GITHUB_STEP_SUMMARY
-          else
-            ORPHAN_COUNT=$(echo "$ORPHANED" | wc -l)
-            echo "⚠️ Found $ORPHAN_COUNT orphaned API(s) in DEV:"
-            echo "$ORPHANED"
-            
-            echo "## 🧹 DEV API Cleanup" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Deleted $ORPHAN_COUNT orphaned API(s):" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            
-            # Delete each orphaned API
-            echo "$ORPHANED" | while read api; do
-              if [ -n "$api" ]; then
-                echo "Deleting orphaned API: $api"
-                az apim api delete \
-                  --resource-group "$AZURE_RESOURCE_GROUP_NAME" \
-                  --service-name "$API_MANAGEMENT_SERVICE_NAME" \
-                  --api-id "$api" \
-                  --delete-revisions true \
-                  --yes || echo "⚠️ Failed to delete $api"
-                
-                echo "- \`$api\`" >> $GITHUB_STEP_SUMMARY
-              fi
-            done
-            
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "✅ DEV environment synchronized with repository" >> $GITHUB_STEP_SUMMARY
-          fi
-
   # Manual approval gate before QA deployment
+  # Pipeline: DEV (extraction source) → Repository → QA → PROD
   approve-qa-deployment:
-    # CRITICAL: always() is required here to run even if previous jobs were skipped
-    # DEV deployment has two mutually exclusive jobs (Deploy-To-DEV-With-Commit-ID OR Deploy-To-DEV-Without-Commit-ID)
-    # Without always(), this job would be skipped when one of the DEV deployment jobs is skipped
-    # The && needs.Test-DEV-After-Deploy.result == 'success' ensures we only approve if tests passed
-    # DO NOT REMOVE always() - it will break QA deployment
-    # See: https://docs.github.com/en/actions/learn-github-actions/expressions#always
-    if: always() && needs.Test-DEV-After-Deploy.result == 'success'
-    needs: Test-DEV-After-Deploy
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     environment:
       name: approve-apim-bpimb-qa  # Create this environment with required reviewers
@@ -245,38 +48,28 @@ jobs:
         run: echo "Proceeding with QA deployment..."
 
   #Deploy to QA with Commit ID (only changed artifacts from last commit)
-  # Pipeline: DAIDS_DEV → Repository → DEV → QA  
+  # Pipeline: DEV (extraction source) → Repository → QA → PROD
   Deploy-To-QA-With-Commit-ID:
-    # CRITICAL: always() is required because approve-qa-deployment uses always()
-    # When a job uses always(), all dependent jobs must also use always() to run
-    # Without always() here, this job would be skipped even after approval
-    # The && needs.approve-qa-deployment.result == 'success' ensures approval was successful
-    # DO NOT REMOVE always() - it will break QA deployment
-    if: always() && needs.approve-qa-deployment.result == 'success' && (github.event_name == 'push' || github.event.inputs.COMMIT_ID_CHOICE == 'publish-artifacts-in-last-commit')
+    if: (github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && github.event.inputs.COMMIT_ID_CHOICE == 'publish-artifacts-in-last-commit')
     needs: [get-commit, approve-qa-deployment]
     uses: ./.github/workflows/run-publisher-with-env.yaml
     with:
       API_MANAGEMENT_ENVIRONMENT: apim-bpimb-qa # Deploys to QA APIM service (niaid-bpimb-apim-qa)
       COMMIT_ID: ${{ needs.get-commit.outputs.commit_id }}
       CONFIGURATION_YAML_PATH: configuration.qa.yaml # QA deployment configuration
-      API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts # Artifacts extracted from DAIDS_DEV environment
+      API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts # Artifacts extracted from DEV environment
     secrets: inherit
 
   #Deploy to QA without Commit ID (all artifacts in repo)
   # Use this option for full redeployment of all artifacts to QA
   Deploy-To-QA-Without-Commit-ID:
-    # CRITICAL: always() is required because approve-qa-deployment uses always()
-    # When a job uses always(), all dependent jobs must also use always() to run
-    # Without always() here, this job would be skipped even after approval
-    # The && needs.approve-qa-deployment.result == 'success' ensures approval was successful
-    # DO NOT REMOVE always() - it will break QA deployment
-    if: always() && needs.approve-qa-deployment.result == 'success' && github.event_name == 'workflow_dispatch' && github.event.inputs.COMMIT_ID_CHOICE == 'publish-all-artifacts-in-repo'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.COMMIT_ID_CHOICE == 'publish-all-artifacts-in-repo'
     needs: [get-commit, approve-qa-deployment]
     uses: ./.github/workflows/run-publisher-with-env.yaml
     with:
       API_MANAGEMENT_ENVIRONMENT: apim-bpimb-qa # Deploys to QA APIM service (niaid-bpimb-apim-qa)
       CONFIGURATION_YAML_PATH: configuration.qa.yaml # QA deployment configuration
-      API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts # All artifacts extracted from DAIDS_DEV environment
+      API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: apimartifacts # All artifacts extracted from DEV environment
     secrets: inherit
 
   # Run full test suite on QA after successful deployment
