@@ -227,18 +227,18 @@ Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{
       
       - name: Deployment Summary
         run: |
-          echo "## Sandbox → DEV Promotion Complete 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "## Sandbox to DEV Promotion Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Promoted APIs:** ${{ github.event.inputs.API_NAMES }}" >> $GITHUB_STEP_SUMMARY
           echo "**Overwrite existing:** ${{ github.event.inputs.OVERWRITE_EXISTING }}" >> $GITHUB_STEP_SUMMARY
           echo "**Committed to repo:** ${{ github.event.inputs.COMMIT_TO_REPO }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ APIs are now deployed to DEV APIM" >> $GITHUB_STEP_SUMMARY
+          echo "- APIs are now deployed to DEV APIM" >> $GITHUB_STEP_SUMMARY
           if [ "${{ github.event.inputs.COMMIT_TO_REPO }}" = "true" ]; then
-            echo "- ✅ Changes committed to main branch" >> $GITHUB_STEP_SUMMARY
-            echo "- 🔄 Publisher workflow will deploy to QA (requires approval)" >> $GITHUB_STEP_SUMMARY
+            echo "- Changes committed to main branch" >> $GITHUB_STEP_SUMMARY
+            echo "- Publisher workflow will deploy to QA (requires approval)" >> $GITHUB_STEP_SUMMARY
           else
-            echo "- ⚠️  Changes NOT committed to repo - DEV only deployment" >> $GITHUB_STEP_SUMMARY
-            echo "- 💡 Run extractor from DEV to capture in repository" >> $GITHUB_STEP_SUMMARY
+            echo "- Changes NOT committed to repo - DEV only deployment" >> $GITHUB_STEP_SUMMARY
+            echo "- Run extractor from DEV to capture in repository" >> $GITHUB_STEP_SUMMARY
           fi
