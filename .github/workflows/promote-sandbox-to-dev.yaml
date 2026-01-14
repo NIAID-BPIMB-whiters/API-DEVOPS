@@ -152,8 +152,6 @@ jobs:
           git add apimartifacts/
           
           if ! git diff --staged --quiet; then
-            git commit -m "feat: Promote from Sandbox
-
-APIs: ${{ github.event.inputs.API_NAMES }}"
+            git commit -m "feat: Promote ${{ github.event.inputs.API_NAMES }} from Sandbox to DEV"
             git push origin main
           fi
