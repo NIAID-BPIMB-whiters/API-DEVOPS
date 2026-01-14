@@ -2,7 +2,7 @@
   "properties": {
     "displayName": "apim-ai-connection-string",
     "keyVault": {
-      "secretIdentifier": "https://kv-niaid-apim-dev.vault.azure.net/secrets/apim-ai-connection-string"
+      "secretIdentifier": "https://kv-niaid-bpimb-apim-dev.vault.azure.net/secrets/apim-ai-connection-string"
     },
     "secret": true
   }
