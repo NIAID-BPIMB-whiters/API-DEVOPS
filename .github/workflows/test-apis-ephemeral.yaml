@@ -34,9 +34,6 @@ on:
         required: false
         type: string
 
-env:
-  ALL_APIS: crms-api-qa,demo-conference-api,echo-api,merlin-db,opentext,otcs-mcp-server,test
-
 jobs:
   # =============================================================================
   # CREATE TEST VM JOB
@@ -125,6 +122,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      - name: Discover APIs from repository
+        id: discover-apis
+        run: |
+          # Get all API directories from apimartifacts/apis
+          # Exclude revision directories (contain semicolons)
+          APIS=$(find apimartifacts/apis -maxdepth 1 -mindepth 1 -type d ! -name "*;*" -exec basename {} \; | sort | tr '\n' ',' | sed 's/,$//')
+          
+          echo "Discovered APIs: $APIS"
+          echo "apis=$APIS" >> $GITHUB_OUTPUT
+      
       - name: Azure Login
         run: |
           az login --service-principal \
@@ -153,7 +160,7 @@ jobs:
           
           # Determine which APIs to test
           if [ -z "${{ github.event.inputs.API_NAME }}" ]; then
-            APIS_TO_TEST="${{ env.ALL_APIS }}"
+            APIS_TO_TEST="${{ steps.discover-apis.outputs.apis }}"
           else
             APIS_TO_TEST="${{ github.event.inputs.API_NAME }}"
           fi
