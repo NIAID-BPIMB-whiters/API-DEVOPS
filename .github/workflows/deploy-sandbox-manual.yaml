@@ -1,86 +1,244 @@
-name: Deploy to Sandbox (Manual)
+name: Promote APIs from Sandbox to DEV
 
 on:
   workflow_dispatch:
     inputs:
-      COMMIT_ID_CHOICE:
-        description: 'Deployment mode'
+      API_NAMES:
+        description: 'API names to promote (comma-separated, e.g., "echo-api,test-api"). Use "ALL" to promote all APIs.'
+        required: true
+        type: string
+      OVERWRITE_EXISTING:
+        description: 'Allow overwriting existing APIs in DEV?'
         required: true
         type: choice
-        default: "publish-all-artifacts-in-repo"
+        default: 'false'
         options:
-          - "publish-artifacts-in-last-commit"
-          - "publish-all-artifacts-in-repo"
+          - 'false'
+          - 'true'
+      COMMIT_TO_REPO:
+        description: 'Commit promoted APIs to repository after deployment?'
+        required: true
+        type: choice
+        default: 'true'
+        options:
+          - 'true'
+          - 'false'
 
 env:
   apiops_release_version: v6.0.2
 
 jobs:
-  deploy-to-sandbox:
+  extract-from-sandbox:
+    name: Extract APIs from Sandbox
     runs-on: ubuntu-latest
     environment: apim-bpimb-sb
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-    
-      - name: Run Spectral
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-      - run: npm install -g @stoplight/spectral-cli
-      - run: spectral lint "${{ github.workspace }}/apimartifacts/apis/*.{json,yml,yaml}" --ruleset https://raw.githubusercontent.com/connectedcircuits/devops-api-linter/main/rules.yaml
-        continue-on-error: true
-
-      - name: Run publisher with commit ID
-        if: github.event.inputs.COMMIT_ID_CHOICE == 'publish-artifacts-in-last-commit'
+      
+      - name: Create extraction configuration
+        run: |
+          if [ "${{ github.event.inputs.API_NAMES }}" = "ALL" ]; then
+            echo "Extracting all APIs from Sandbox"
+            cat > extraction-config.yaml << 'EOF'
+          apimSpecification:
+            name: ${{ secrets.API_MANAGEMENT_SERVICE_NAME }}
+          apiSpecification:
+            format: OpenAPIV3Yaml
+          EOF
+          else
+            echo "Extracting specific APIs: ${{ github.event.inputs.API_NAMES }}"
+            cat > extraction-config.yaml << 'EOF'
+          apimSpecification:
+            name: ${{ secrets.API_MANAGEMENT_SERVICE_NAME }}
+          apiSpecification:
+            format: OpenAPIV3Yaml
+          apis:
+          EOF
+            echo "${{ github.event.inputs.API_NAMES }}" | tr ',' '\n' | while read api; do
+              echo "  - name: $api" >> extraction-config.yaml
+            done
+          fi
+          cat extraction-config.yaml
+      
+      - name: Download and run extractor
         env:
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           AZURE_RESOURCE_GROUP_NAME: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}
-          API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: ${{ github.workspace }}/apimartifacts
-          CONFIGURATION_YAML_PATH: ${{ github.workspace }}/configuration.sandbox.yaml
-          COMMIT_ID: ${{ github.sha }}
+          API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: ${{ github.workspace }}/extracted-sandbox
+          CONFIGURATION_YAML_PATH: ${{ github.workspace }}/extraction-config.yaml
         run: |
-          set -e
-          echo "Temporarily excluding gateways (Developer tier limit: 1 gateway)..."
-          mv apimartifacts/gateways apimartifacts/gateways.excluded || true
+          echo "Downloading extractor..."
+          wget -O extractor.zip https://github.com/Azure/apiops/releases/download/${{ env.apiops_release_version }}/extractor-linux-x64.zip
+          unzip extractor.zip
+          chmod +x ./extractor
           
-          echo "Downloading publisher..."
-          wget -O publisher.zip https://github.com/Azure/apiops/releases/download/${{ env.apiops_release_version }}/publisher-linux-x64.zip
-          unzip publisher.zip
-          chmod +x ./publisher
-          echo "Running publisher with commit ID..."
-          ./publisher
+          echo "Extracting APIs from Sandbox APIM..."
+          ./extractor
           
-          echo "Restoring gateways directory..."
-          mv apimartifacts/gateways.excluded apimartifacts/gateways || true
-        shell: bash
+          echo "Extracted artifacts:"
+          ls -la extracted-sandbox/apis/ || echo "No APIs extracted"
+      
+      - name: Upload extracted artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sandbox-extracted-apis
+          path: extracted-sandbox/
+          retention-days: 1
 
-      - name: Run publisher without commit ID (all artifacts)
-        if: github.event.inputs.COMMIT_ID_CHOICE == 'publish-all-artifacts-in-repo'
+  check-dev-conflicts:
+    name: Check for conflicts in DEV
+    runs-on: ubuntu-latest
+    needs: extract-from-sandbox
+    environment: apim-bpimb-dev
+    if: github.event.inputs.OVERWRITE_EXISTING == 'false'
+    steps:
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      
+      - name: Check for existing APIs
+        run: |
+          echo "Checking if APIs already exist in DEV..."
+          
+          if [ "${{ github.event.inputs.API_NAMES }}" = "ALL" ]; then
+            echo "WARNING: Promoting ALL APIs - skipping conflict check"
+            exit 0
+          fi
+          
+          IFS=',' read -ra APIS <<< "${{ github.event.inputs.API_NAMES }}"
+          CONFLICTS=""
+          
+          for api in "${APIS[@]}"; do
+            api=$(echo "$api" | xargs) # trim whitespace
+            echo "Checking API: $api"
+            
+            if az apim api show \
+              --resource-group nih-niaid-azurestrides-dev-rg-apim-az \
+              --service-name niaid-bpimb-apim-dev \
+              --api-id "$api" 2>/dev/null; then
+              echo "⚠️  API '$api' already exists in DEV"
+              CONFLICTS="$CONFLICTS $api"
+            else
+              echo "✅ API '$api' does not exist in DEV"
+            fi
+          done
+          
+          if [ -n "$CONFLICTS" ]; then
+            echo "❌ ERROR: The following APIs already exist in DEV:$CONFLICTS"
+            echo "To overwrite, set OVERWRITE_EXISTING=true"
+            exit 1
+          fi
+          
+          echo "✅ No conflicts detected - safe to promote"
+
+  deploy-to-dev:
+    name: Deploy to DEV
+    runs-on: ubuntu-latest
+    needs: [extract-from-sandbox, check-dev-conflicts]
+    if: always() && needs.extract-from-sandbox.result == 'success' && (needs.check-dev-conflicts.result == 'success' || needs.check-dev-conflicts.result == 'skipped')
+    environment: apim-bpimb-dev
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download extracted artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: sandbox-extracted-apis
+          path: sandbox-artifacts
+      
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      
+      - name: Deploy to DEV using publisher
         env:
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          AZURE_RESOURCE_GROUP_NAME: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}
-          API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: ${{ github.workspace }}/apimartifacts
-          CONFIGURATION_YAML_PATH: ${{ github.workspace }}/configuration.sandbox.yaml
+          AZURE_RESOURCE_GROUP_NAME: nih-niaid-azurestrides-dev-rg-apim-az
+          API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: ${{ github.workspace }}/sandbox-artifacts
+          CONFIGURATION_YAML_PATH: ${{ github.workspace }}/configuration.dev.yaml
         run: |
-          set -e
-          echo "Temporarily excluding gateways (Developer tier limit: 1 gateway)..."
-          mv apimartifacts/gateways apimartifacts/gateways.excluded || true
-          
           echo "Downloading publisher..."
           wget -O publisher.zip https://github.com/Azure/apiops/releases/download/${{ env.apiops_release_version }}/publisher-linux-x64.zip
           unzip publisher.zip
           chmod +x ./publisher
-          echo "Running publisher (all artifacts except gateways)..."
+          
+          echo "Deploying to DEV APIM..."
           ./publisher
           
-          echo "Restoring gateways directory..."
-          mv apimartifacts/gateways.excluded apimartifacts/gateways || true
-        shell: bash
+          echo "✅ Deployment complete"
+      
+      - name: Commit promoted APIs to repository
+        if: github.event.inputs.COMMIT_TO_REPO == 'true'
+        run: |
+          echo "Merging promoted APIs into repository..."
+          
+          # Copy extracted APIs to apimartifacts
+          if [ -d "sandbox-artifacts/apis" ]; then
+            mkdir -p apimartifacts/apis
+            cp -r sandbox-artifacts/apis/* apimartifacts/apis/ || true
+          fi
+          
+          # Copy backends if they exist
+          if [ -d "sandbox-artifacts/backends" ]; then
+            mkdir -p apimartifacts/backends
+            cp -r sandbox-artifacts/backends/* apimartifacts/backends/ || true
+          fi
+          
+          # Copy named values if they exist
+          if [ -d "sandbox-artifacts/named values" ]; then
+            mkdir -p "apimartifacts/named values"
+            cp -r "sandbox-artifacts/named values"/* "apimartifacts/named values/" || true
+          fi
+          
+          # Copy products if they exist
+          if [ -d "sandbox-artifacts/products" ]; then
+            mkdir -p apimartifacts/products
+            cp -r sandbox-artifacts/products/* apimartifacts/products/ || true
+          fi
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add apimartifacts/
+          
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "feat: Promote APIs from Sandbox to DEV
+
+Promoted APIs: ${{ github.event.inputs.API_NAMES }}
+Overwrite existing: ${{ github.event.inputs.OVERWRITE_EXISTING }}
+Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            
+            git push origin main
+            echo "✅ Changes committed to repository"
+          fi
+      
+      - name: Deployment Summary
+        run: |
+          echo "## Sandbox → DEV Promotion Complete 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Promoted APIs:** ${{ github.event.inputs.API_NAMES }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Overwrite existing:** ${{ github.event.inputs.OVERWRITE_EXISTING }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Committed to repo:** ${{ github.event.inputs.COMMIT_TO_REPO }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ APIs are now deployed to DEV APIM" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.event.inputs.COMMIT_TO_REPO }}" = "true" ]; then
+            echo "- ✅ Changes committed to main branch" >> $GITHUB_STEP_SUMMARY
+            echo "- 🔄 Publisher workflow will deploy to QA (requires approval)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ⚠️  Changes NOT committed to repo - DEV only deployment" >> $GITHUB_STEP_SUMMARY
+            echo "- 💡 Run extractor from DEV to capture in repository" >> $GITHUB_STEP_SUMMARY
+          fi
