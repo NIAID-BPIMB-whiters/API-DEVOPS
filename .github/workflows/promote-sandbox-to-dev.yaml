@@ -130,6 +130,24 @@ jobs:
           name: extracted-apis
           path: artifacts
       
+      - name: Create publisher configuration
+        run: |
+          # Create a custom config that only deploys the specified APIs
+          cat > publisher-config.yaml << 'EOF'
+          apimServiceName: ${{ secrets.API_MANAGEMENT_SERVICE_NAME }}
+          apis:
+          EOF
+          
+          # Add each API to the config
+          if [ "${{ github.event.inputs.API_NAMES }}" != "ALL" ]; then
+            echo "${{ github.event.inputs.API_NAMES }}" | tr ',' '\n' | while read api; do
+              echo "  - name: $api" >> publisher-config.yaml
+            done
+          fi
+          
+          echo "Publisher configuration:"
+          cat publisher-config.yaml
+      
       - name: Deploy
         env:
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -139,7 +157,7 @@ jobs:
           AZURE_RESOURCE_GROUP_NAME: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}
           API_MANAGEMENT_SERVICE_NAME: ${{ secrets.API_MANAGEMENT_SERVICE_NAME }}
           API_MANAGEMENT_SERVICE_OUTPUT_FOLDER_PATH: ${{ github.workspace }}/artifacts
-          CONFIGURATION_YAML_PATH: ${{ github.workspace }}/configuration.dev.yaml
+          CONFIGURATION_YAML_PATH: ${{ github.workspace }}/publisher-config.yaml
         run: |
           wget -O publisher.zip https://github.com/Azure/apiops/releases/download/${{ env.apiops_release_version }}/publisher-linux-x64.zip
           unzip publisher.zip
