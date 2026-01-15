@@ -9,7 +9,6 @@
     "protocols": [
       "https"
     ],
-    "serviceUrl": "https://edrms-xdev.niaid.nih.gov",
     "subscriptionKeyParameterNames": {
       "header": "Ocp-Apim-Subscription-Key",
       "query": "subscription-key"
