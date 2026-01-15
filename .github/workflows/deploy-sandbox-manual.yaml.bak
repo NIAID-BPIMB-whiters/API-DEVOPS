@@ -153,6 +153,16 @@ jobs:
         with:
           name: sandbox-extracted-apis
           path: sandbox-artifacts
+
+      - name: Remap all secretIdentifier values to DEV Key Vault
+        run: |
+          echo "Remapping all secretIdentifier values in named values to DEV Key Vault..."
+          find sandbox-artifacts/ -type f -path '*/named values/*/namedValueInformation.json' -print0 | while IFS= read -r -d '' file; do
+            if grep -q 'secretIdentifier' "$file"; then
+              sed -i 's#https://kv-niaid-apim-sb.vault.azure.net/secrets/#https://kv-niaid-bpimb-apim-dev.vault.azure.net/secrets/#g' "$file"
+            fi
+          done
+          echo "Remapping complete."
       
       - name: Azure Login
         uses: azure/login@v2
@@ -217,7 +227,7 @@ jobs:
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "feat: Promote APIs from Sandbox to DEV
+              git commit -m "chore: Update APIs from Sandbox to DEV
 
 Promoted APIs: ${{ github.event.inputs.API_NAMES }}
 Overwrite existing: ${{ github.event.inputs.OVERWRITE_EXISTING }}
