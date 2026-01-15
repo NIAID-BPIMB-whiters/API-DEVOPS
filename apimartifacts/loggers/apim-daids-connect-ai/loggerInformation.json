@@ -1,0 +1,10 @@
+{
+  "properties": {
+    "loggerType": "applicationInsights",
+    "credentials": {
+      "connectionString": "{{apim-ai-connection-string}}"
+    },
+    "isBuffered": true,
+    "resourceId": "/subscriptions/18fc6b8b-44fa-47d7-ae51-36766ac67165/resourceGroups/niaid-bpimb-apim-sb-rg/providers/Microsoft.Insights/components/niaid-bpimb-apim-sb-ai"
+  }
+}
