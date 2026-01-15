@@ -15,21 +15,13 @@ on:
         options:
           - 'false'
           - 'true'
-      COMMIT_TO_REPO:
-        description: 'Commit to repository?'
-        required: true
-        type: choice
-        default: 'false'
-        options:
-          - 'true'
-          - 'false'
 
 env:
   apiops_release_version: v6.0.2
 
 permissions:
   id-token: write
-  contents: write
+  contents: read
 
 jobs:
   extract-from-sandbox:
@@ -163,18 +155,3 @@ jobs:
           unzip publisher.zip
           chmod +x ./publisher
           ./publisher
-      
-      - name: Commit to repo
-        if: github.event.inputs.COMMIT_TO_REPO == 'true'
-        run: |
-          [ -d "artifacts/apis" ] && cp -r artifacts/apis/* apimartifacts/apis/ || true
-          [ -d "artifacts/backends" ] && cp -r artifacts/backends/* apimartifacts/backends/ || true
-          
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add apimartifacts/
-          
-          if ! git diff --staged --quiet; then
-            git commit -m "feat: Promote ${{ github.event.inputs.API_NAMES }} from Sandbox to DEV"
-            git push origin main
-          fi
