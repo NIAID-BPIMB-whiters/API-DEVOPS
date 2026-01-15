@@ -8,7 +8,7 @@
 # When this file is used, only the artifacts specified here will be extracted.
 # =============================================================================
 
-apimServiceName: apim-daids-connect  # DEV APIM Service Name
+apimServiceName: niaid-bpimb-apim-dev  # DEV APIM Service Name
 
 # =============================================================================
 # API EXTRACTION CONFIGURATION
