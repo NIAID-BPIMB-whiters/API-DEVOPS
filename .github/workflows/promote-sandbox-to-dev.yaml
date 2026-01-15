@@ -27,6 +27,10 @@ on:
 env:
   apiops_release_version: v6.0.2
 
+permissions:
+  id-token: write
+  contents: write
+
 jobs:
   extract-from-sandbox:
     name: Extract from Sandbox
