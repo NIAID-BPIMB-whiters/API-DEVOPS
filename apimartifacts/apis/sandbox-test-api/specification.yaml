@@ -1,11 +1,18 @@
 openapi: 3.0.1
 info:
-  title: EDRMS-XDEV
-  description: ''
+  title: Sandbox Test API
   version: '1.0'
 servers:
-  - url: https://niaid-bpimb-apim-dev.azure-api.net/opentext
-paths: { }
+  - url: https://niaid-bpimb-apim-dev.azure-api.net/sandbox-test
+paths:
+  /get:
+    get:
+      summary: Get Test
+      description: Get Test
+      operationId: 022b17a409a44104a9b346490597b0b8
+      responses:
+        '200':
+          description: ''
 components:
   securitySchemes:
     apiKeyHeader:

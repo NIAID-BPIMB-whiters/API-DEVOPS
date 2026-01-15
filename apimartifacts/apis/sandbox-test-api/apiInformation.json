@@ -1,14 +1,14 @@
 {
   "properties": {
-    "path": "opentext",
+    "path": "sandbox-test",
     "apiRevision": "1",
     "authenticationSettings": {},
-    "description": "",
     "isCurrent": true,
-    "displayName": "EDRMS-XDEV",
+    "displayName": "Sandbox Test API",
     "protocols": [
       "https"
     ],
+    "serviceUrl": "https://httpbin.org",
     "subscriptionKeyParameterNames": {
       "header": "Ocp-Apim-Subscription-Key",
       "query": "subscription-key"

@@ -18,6 +18,7 @@
 				<origin>https://edrms-dev.niaid.nih.gov</origin>
 				<origin>https://ess-dev.niaid.nih.gov</origin>
 				<origin>https://edrms-xdev.niaid.nih.gov</origin>
+				<origin>https://niaid-bpimb-apim-sb.developer.azure-api.net</origin>
 			</allowed-origins>
 			<allowed-methods preflight-result-max-age="300">
 				<method>*</method>
