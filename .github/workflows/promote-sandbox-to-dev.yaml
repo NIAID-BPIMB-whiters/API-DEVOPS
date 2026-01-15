@@ -122,20 +122,45 @@ jobs:
           name: extracted-apis
           path: artifacts
       
+      - name: Filter artifacts to only specified APIs
+        run: |
+          # If not ALL, keep only the specified APIs
+          if [ "${{ github.event.inputs.API_NAMES }}" != "ALL" ]; then
+            cd artifacts/apis
+            # Get list of API names to keep
+            IFS=',' read -ra KEEP_APIS <<< "${{ github.event.inputs.API_NAMES }}"
+            
+            # Remove all APIs except the ones we want
+            for dir in */; do
+              dir_name="${dir%/}"
+              keep=false
+              for api in "${KEEP_APIS[@]}"; do
+                api=$(echo "$api" | xargs)  # trim whitespace
+                if [ "$dir_name" = "$api" ]; then
+                  keep=true
+                  break
+                fi
+              done
+              
+              if [ "$keep" = false ]; then
+                echo "Removing API: $dir_name"
+                rm -rf "$dir_name"
+              else
+                echo "Keeping API: $dir_name"
+              fi
+            done
+            cd ../..
+          fi
+          
+          echo "APIs to deploy:"
+          ls -la artifacts/apis/
+      
       - name: Create publisher configuration
         run: |
-          # Create a custom config that only deploys the specified APIs
+          # Simple config - just set the target APIM service name
           cat > publisher-config.yaml << 'EOF'
           apimServiceName: ${{ secrets.API_MANAGEMENT_SERVICE_NAME }}
-          apis:
           EOF
-          
-          # Add each API to the config
-          if [ "${{ github.event.inputs.API_NAMES }}" != "ALL" ]; then
-            echo "${{ github.event.inputs.API_NAMES }}" | tr ',' '\n' | while read api; do
-              echo "  - name: $api" >> publisher-config.yaml
-            done
-          fi
           
           echo "Publisher configuration:"
           cat publisher-config.yaml
