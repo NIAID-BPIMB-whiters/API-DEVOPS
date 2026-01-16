@@ -21,7 +21,7 @@ on:
         description: 'Choose "publish-all-artifacts-in-repo" only when you want to force republishing all artifacts (e.g. after build failure). Otherwise stick with the default behavior of "publish-artifacts-in-last-commit"'
         required: true
         type: choice
-        default: "publish-artifacts-in-last-commit"
+        default: "publish-all-artifacts-in-repo"
         options:
           - "publish-artifacts-in-last-commit"
           - "publish-all-artifacts-in-repo"

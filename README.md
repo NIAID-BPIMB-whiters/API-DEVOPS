@@ -2346,6 +2346,19 @@ az login --service-principal \
 az apim show --name apim-daids-connect --resource-group nih-niaid-avidpoc-dev-rg
 ```
 
+### Subscription Quota Limit Reached
+
+**Issue**: Deployment fails with a subscription quota error (e.g., "Subscriptions limit reached for same user")
+
+**Solution**:
+- Delete existing subscriptions in the target environment (e.g., QA or PROD) using the Azure Portal or Azure CLI:
+  ```bash
+  az apim subscription list --resource-group <target-rg> --service-name <target-apim>
+  az apim subscription delete --resource-group <target-rg> --service-name <target-apim> --sid <subscription-id>
+  ```
+- This frees up quota so the same subscriptions can be published from lower environments (DEV → QA → PROD).
+- Re-run the publisher workflow after cleanup.
+
 ### Publisher Workflow Fails
 
 **Issue**: Spectral linting fails

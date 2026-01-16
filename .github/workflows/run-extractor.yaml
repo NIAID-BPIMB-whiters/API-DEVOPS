@@ -11,6 +11,7 @@ on:
         description: 'Choose Wether to extract all Apis or extract apis listed an extraction configuration file'     
         required: true
         type: choice
+        default: "Extract All APIs"
         options:
         - Extract All APIs
         - configuration.extractor.yaml
