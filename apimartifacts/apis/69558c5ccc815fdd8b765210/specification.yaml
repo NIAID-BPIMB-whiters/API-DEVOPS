@@ -4,7 +4,7 @@ info:
   description: ''
   version: ''
 servers:
-  - url: https://gateway.apimdev.niaid.nih.gov/merlin
+  - url: https://niaid-bpimb-apim-dev.azure-api.net/merlin
 paths:
   /vendors:
     get:

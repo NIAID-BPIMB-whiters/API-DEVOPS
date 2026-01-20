@@ -1,0 +1,6 @@
+{
+  "properties": {
+    "displayName": "niaid-bpimb-apim-dev-ai-connection-string",
+    "secret": true
+  }
+}

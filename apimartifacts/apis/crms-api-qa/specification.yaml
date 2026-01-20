@@ -4,7 +4,7 @@ info:
   description: 'This is CRMS API QA instance (on-premise), which will be used by the SPO DAIDS Connect DEV and QA web parts to retrieve CRMS data. '
   version: '1.0'
 servers:
-  - url: https://gateway.apimdev.niaid.nih.gov/crms-api-qa
+  - url: https://niaid-bpimb-apim-dev.azure-api.net/crms-api-qa
 paths:
   /sites/GetSites:
     post:
