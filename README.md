@@ -44,12 +44,12 @@
 
 ## Overview
 
-This repository implements **GitOps for Azure API Management (APIM)** using Microsoft's [Azure APIops Toolkit](https://github.com/Azure/apiops). It automates the extraction, version control, and deployment of API Management artifacts across DAIDS_DEV, DEV, and QA environments.
+This repository implements **GitOps for Azure API Management (APIM)** using Microsoft's [Azure APIops Toolkit](https://github.com/Azure/apiops). It automates the extraction, version control, and deployment of API Management artifacts across DEV, QA, and PROD environments.
 
 ### Key Features
 
-- ✅ **Automated API Extraction** from DAIDS_DEV APIM to Git
-- ✅ **Automated Deployment** to DEV and QA APIM via push to main branch
+- ✅ **Automated API Extraction** from DEV APIM to Git
+- ✅ **Automated Deployment** to QA APIM via push to main branch
 - ✅ **Version Control** for all APIM artifacts (APIs, policies, backends, products, etc.)
 - ✅ **Environment-Specific Configuration** with Key Vault integration and environment remapping
 - ✅ **Automated API Testing** using ephemeral Azure VMs for internal VNet testing
@@ -61,22 +61,20 @@ This repository implements **GitOps for Azure API Management (APIM)** using Micr
 
 ## Environments
 
-This repository manages three APIM instances with five GitHub environments (three credential environments + two approval gates):
+This repository manages two APIM instances with four GitHub environments (two credential environments + two approval gates), with PROD deployment planned for future implementation:
 
 | GitHub Environment | Purpose | APIM Service | Resource Group | Network |
 |-------------------|---------|--------------|----------------|---------|
-| **apim-daids-connect** | Extractor source | niaid-daids-connect-apim | nih-niaid-azurestrides-dev-rg-apim-az | Internal VNet |
-| **apim-bpimb-dev** | DEV deployment target | niaid-bpimb-apim-dev | nih-niaid-azurestrides-dev-rg-apim-az | Internal VNet |
+| **apim-bpimb-dev** | Extractor source | niaid-bpimb-apim-dev | nih-niaid-azurestrides-dev-rg-apim-az | Internal VNet |
 | **apim-bpimb-qa** | QA deployment target | niaid-bpimb-apim-qa | nih-niaid-azurestrides-dev-rg-apim-az | Internal VNet |
-| **approve-apim-bpimb-dev** | DEV approval gate | N/A - approval only | N/A | N/A |
+| **apim-bpimb-prod** | PROD deployment target | TBD | TBD | TBD |
 | **approve-apim-bpimb-qa** | QA approval gate | N/A - approval only | N/A | N/A |
 
 **Environment Secrets** (stored in GitHub environment settings):
-- **apim-daids-connect**: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME` (niaid-daids-connect-apim)
-- **apim-bpimb-dev**: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME` (niaid-bpimb-apim-dev), `APIM_SUBSCRIPTION_KEY`
+- **apim-bpimb-dev**: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME` (niaid-bpimb-apim-dev)
 - **apim-bpimb-qa**: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME` (niaid-bpimb-apim-qa), `APIM_SUBSCRIPTION_KEY`
 
-**Approval Environments** are configured with required reviewers to gate deployments to DEV and QA.
+**Approval Environments** are configured with required reviewers to gate deployments to QA.
 
 ### Network Architecture
 
@@ -87,8 +85,7 @@ graph TB
     subgraph Azure["Azure Subscription: 18fc6b8b-44fa-47d7-ae51-36766ac67165"]
         subgraph VNet["nih-niaid-azurestrides-dev-vnet-apim-az<br/>Internal VNet"]
             subgraph Subnet1["APIM Subnet"]
-                DAIDS[niaid-daids-connect-apim<br/>Private IP: 10.x.x.x]
-                DEV_APIM[niaid-bpimb-apim-dev<br/>Private IP: 10.x.x.x]
+                DEV_APIM[niaid-bpimb-apim-dev<br/>Private IP: 10.x.x.x<br/>🚀 Extractor Source]
                 QA_APIM[niaid-bpimb-apim-qa<br/>Private IP: 10.x.x.x]
             end
             
@@ -111,19 +108,14 @@ graph TB
         TESTS[Ephemeral Test Workflow]
     end
     
-    EXTRACTOR -->|Extract via Azure API| DAIDS
-    PUBLISHER -->|Deploy via Azure API| DEV_APIM
+    EXTRACTOR -->|Extract via Azure API| DEV_APIM
     PUBLISHER -->|Deploy via Azure API| QA_APIM
     TESTS -->|Create VM in VNet| TEST_VM
-    TEST_VM -->|Test via private IP| DEV_APIM
     TEST_VM -->|Test via private IP| QA_APIM
-    DEV_APIM -->|Logging| DEV_AI
     QA_APIM -->|Logging| QA_AI
-    DEV_APIM -->|Secrets| DEV_KV
     QA_APIM -->|Secrets| QA_KV
     
-    style DAIDS fill:#fff4e6
-    style DEV_APIM fill:#e6f7ff
+    style DEV_APIM fill:#fff4e6
     style QA_APIM fill:#f0f5ff
     style TEST_VM fill:#f6ffed
 ```
@@ -145,7 +137,7 @@ git add apimartifacts/apis/your-api/
 git commit -m "feat: Update your-api specification"
 git push origin main
 
-# 2. GitHub Actions automatically deploys to DEV → QA (with approvals)
+# 2. GitHub Actions automatically deploys to QA (with approvals)
 # Monitor: https://github.com/NIAID-BPIMB-whiters/API-DEVOPS/actions
 ```
 
@@ -305,29 +297,14 @@ Each API in `apimartifacts/apis/` contains:
 
 ### Azure Resources
 
-#### DAIDS_DEV Environment (Extractor Source)
-- **APIM Service**: `apim-daids-connect`
-  - Resource Group: `nih-niaid-avidpoc-dev-rg`
-  - Region: `eastus`
-  - SKU: `Developer`
-  - Network: Internal VNet (`nih-niaid-azurestrides-dev-apim-az`)
-  - Gateway: `apim-daids-connect.azure-api.net` (Private IP: `10.178.57.52`)
-  - Purpose: Source for artifact extraction
-
-- **Application Insights**: `apim-daids-connect-ai`
-  - Resource Group: `nih-niaid-avidpoc-dev-rg`
-  - Region: `eastus`
-  - Instrumentation Key: `98066d90-6565-4993-b071-c5a453f2ce44`
-  - Purpose: APIM diagnostics and logging
-
-#### DEV Environment (Deployment Target)
+#### DEV Environment (Extractor Source)
 - **APIM Service**: `niaid-bpimb-apim-dev`
   - Resource Group: `niaid-bpimb-apim-dev-rg`
   - Region: `eastus2`
   - SKU: `Developer`
   - Network: Internal VNet (`nih-niaid-azurestrides-bpimb-dev-apim-az`)
   - Gateway: `niaid-bpimb-apim-dev.azure-api.net` (Private IP: `10.179.0.4`)
-  - Purpose: Target for automated deployments
+  - Purpose: Source for artifact extraction
 
 - **Application Insights**: `niaid-bpimb-apim-dev-ai`
   - Resource Group: `niaid-bpimb-apim-dev-rg`
@@ -335,7 +312,7 @@ Each API in `apimartifacts/apis/` contains:
   - Instrumentation Key: `369236ca-f1b0-43f7-a58e-036094365a7c`
   - Purpose: APIM diagnostics and logging
 
-#### QA Environment
+#### QA Environment (Deployment Target)
 - **APIM Service**: `niaid-bpimb-apim-qa`
   - Resource Group: `niaid-bpimb-apim-qa-rg`
   - Region: `eastus2`
@@ -358,35 +335,34 @@ Each API in `apimartifacts/apis/` contains:
 
 #### Network Configuration
 
-**DAIDS_DEV VNet** (`nih-niaid-azurestrides-dev-apim-az`):
-- Address Space: `10.178.57.0/24`
-- APIM Subnet: `niaid-apim` (`10.178.57.48/28`)
-- Test VM Subnet: `niaid-commonservices-test` (`10.178.57.64/27`)
-
 **DEV VNet** (`nih-niaid-azurestrides-bpimb-dev-apim-az`):
 - Address Space: `10.179.0.0/24`
 - APIM Subnet: `dev-apim-subnet` (`10.179.0.0/28`)
 - Test VM Subnet: `dev-commonservices` (`10.179.0.32/27`)
+- **Purpose**: Extractor source environment
 
 **QA VNet** (`nih-niaid-azurestrides-bpimb-qa-apim-az`):
 - Address Space: `10.180.0.0/24`
 - APIM Subnet: `qa-apim-subnet` (`10.180.0.0/28`)
 - Test VM Subnet: `qa-commonservices` (`10.180.0.32/27`)
 - **Status**: ✅ Complete - VNet configured and APIM migrated
+- **Purpose**: QA deployment target
 
 ### API Inventory
 
-Currently managing **7 APIs** across all environments:
+Currently managing **9 APIs** across DEV and QA environments:
 
 | API Name | Purpose | Path |
 |----------|---------|------|
+| `69558c5ccc815fdd8b765210` | Merlin Vendor Lookup API | `/merlin` |
 | `crms-api-qa` | Clinical Research Management System (QA) | `/crms-api-qa` |
 | `demo-conference-api` | Demo API for conference showcase | `/conference` |
 | `echo-api` | Testing/debugging echo service | `/echo` |
-| `merlin-db` | Merlin database API | `/merlin-db` |
+| `merlin-api-v1` | Merlin Vendor Lookup API (v1) | `/merlin` |
 | `opentext` | OpenText document management | `/opentext` |
 | `otcs-mcp-server` | OpenText Content Server MCP | `/otcs-mcp` |
 | `test` | General testing API | `/test` |
+| `test-v1` | General testing API (v1) | `/test` |
 
 > **Note**: `itpms-chat-api` was removed on December 26, 2025 as part of POC cleanup. See [POC-EXPORT-niaid-azure-oaipoc-api-fa.md](POC-EXPORT-niaid-azure-oaipoc-api-fa.md) for archived configuration.
 
@@ -427,21 +403,21 @@ To receive email notifications when VM cleanup is required or workflows fail:
 
 ### 1. Extract Artifacts (`run-extractor.yaml`)
 
-**Purpose**: Extract APIM artifacts from DAIDS_DEV environment to Git repository
+**Purpose**: Extract APIM artifacts from DEV environment to Git repository
 
 **Trigger**: Manual workflow dispatch
 
 **Pipeline Flow**:
 ```
-DAIDS_DEV APIM (apim-daids-connect) → Extractor Tool → apimartifacts/ folder → Git commit
+DEV APIM (niaid-bpimb-apim-dev) → Extractor Tool → apimartifacts/ folder → Git commit
 ```
 
 **Configuration Options**:
-- **Extract All APIs**: Extracts all artifacts from DAIDS_DEV APIM
+- **Extract All APIs**: Extracts all artifacts from DEV APIM
 - **Use configuration.extractor.yaml**: Selectively extract specific APIs/artifacts
 
 **Environment Variables**:
-- Uses `daids_dev` environment secrets
+- Uses `apim-bpimb-dev` environment secrets
 - `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`
 - `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP_NAME`
 - `API_MANAGEMENT_SERVICE_NAME`
@@ -459,9 +435,9 @@ gh workflow run run-extractor.yaml -f CONFIGURATION_YAML_PATH="configuration.ext
 
 ---
 
-### 2. Publish to DEV and QA (`run-publisher.yaml`)
+### 2. Publish to QA (`run-publisher.yaml`)
 
-**Purpose**: Deploy artifacts from repository to DEV and QA APIM environments
+**Purpose**: Deploy artifacts from repository to QA APIM environment
 
 **Trigger**: 
 - Push to `main` branch (automatic)
@@ -469,7 +445,7 @@ gh workflow run run-extractor.yaml -f CONFIGURATION_YAML_PATH="configuration.ext
 
 **Pipeline Flow**:
 ```
-Git Repository (apimartifacts/) → Publisher Tool → DEV APIM → Test DEV → QA APIM → Test QA
+Git Repository (apimartifacts/) → Publisher Tool → QA APIM → Test QA
 ```
 
 **Deployment Modes**:
@@ -545,7 +521,7 @@ gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-artifacts-in-las
 
 **Use Cases**:
 ```bash
-# Rebuild DEV environment after manual portal changes
+# Rebuild QA environment after manual portal changes
 gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in-repo"
 
 # Fix sync issues
@@ -574,17 +550,16 @@ gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in
 **Features**:
 - ✅ **API Specification Linting**: Validates OpenAPI specs with Spectral
 - ✅ **Environment-Specific Configuration**: Remaps Key Vault URLs and resource references per environment
-- ✅ **Post-Deployment Testing**: Triggers full API test suite on DEV, gates QA deployment
+- ✅ **Post-Deployment Testing**: Triggers full API test suite on QA after deployment
 - ✅ **Logging**: Configurable log levels (Information, Debug, etc.)
-- ✅ **Test Gate**: QA deployment waits for DEV tests to pass
-- ✅ **Manual Approval**: Both DEV and QA deployments require approval from designated reviewers
+- ✅ **Manual Approval**: QA deployments require approval from designated reviewers
 
 **Deployment Tagging**:
 
 Every successful deployment (after tests pass) is automatically tagged for rollback capability:
 - **Tag Format**: `deploy-{environment}-{timestamp}-{short-sha}`
-- **Example**: `deploy-dev-20260112-190042-4d53845`
-- **Created By**: Tag-DEV-Deployment and Tag-QA-Deployment jobs
+- **Example**: `deploy-qa-20260112-190042-4d53845`
+- **Created By**: Tag-QA-Deployment job
 - **Metadata Includes**: Deployer name, workflow run ID, test status
 - **Purpose**: Enable quick rollback to known-good states
 
@@ -597,31 +572,23 @@ Deploy → Test → Tag (if tests pass) → Cleanup Orphaned APIs
 
 ```mermaid
 graph TD
-    START([Push to main or<br/>manual trigger]) --> APPROVE_DEV{Approval Gate<br/>approve-apim-bpimb-dev}
-    APPROVE_DEV --> |Reviewer approves| GET_COMMIT[Get Commit ID]
-    GET_COMMIT --> DEPLOY_DEV[Deploy to DEV<br/>uses: apim-bpimb-dev secrets]
-    DEPLOY_DEV --> TEST_DEV[Test DEV APIs<br/>ephemeral VM]
-    TEST_DEV --> |Tests pass| APPROVE_QA{Approval Gate<br/>approve-apim-bpimb-qa}
-    TEST_DEV --> |Tests fail| FAIL_DEV[❌ Stop Pipeline]
+    START([Push to main or<br/>manual trigger]) --> GET_COMMIT[Get Commit ID]
+    GET_COMMIT --> APPROVE_QA{Approval Gate<br/>approve-apim-bpimb-qa}
     APPROVE_QA --> |Reviewer approves| DEPLOY_QA[Deploy to QA<br/>uses: apim-bpimb-qa secrets]
     DEPLOY_QA --> TEST_QA[Test QA APIs<br/>ephemeral VM]
     TEST_QA --> |Tests pass| SUCCESS[✅ Complete]
     TEST_QA --> |Tests fail| FAIL_QA[❌ Stop Pipeline]
     
-    style APPROVE_DEV fill:#fff7e6
     style APPROVE_QA fill:#fff7e6
-    style DEPLOY_DEV fill:#e6f7ff
     style DEPLOY_QA fill:#f0f5ff
-    style TEST_DEV fill:#f6ffed
     style TEST_QA fill:#f6ffed
     style SUCCESS fill:#d9f7be
-    style FAIL_DEV fill:#ffccc7
     style FAIL_QA fill:#ffccc7
 ```
 
 Steps:
 1. Workflow triggers (push to main or manual run)
-2. ⏸️  **Pauses before DEV deployment** - awaits approval
+2. ⏸️  **Pauses before QA deployment** - awaits approval
 3. Designated reviewer approves via GitHub Actions UI
 4. ✅ Deploys to DEV and runs tests
 5. ⏸️  **Pauses before QA deployment** - awaits approval (after DEV tests pass)
@@ -635,16 +602,14 @@ GitHub → Settings → Environments → dev/qa → Required reviewers
 
 ### Approval Architecture
 
-The deployment workflow uses **two separate environments for each deployment target** to prevent multiple approval prompts:
+The deployment workflow uses separate environments for approval and credentials to prevent multiple approval prompts:
 
 | Environment Name | Type | Purpose | Contains |
 |-----------------|------|---------|----------|
-| `approve-apim-bpimb-dev` | Approval Gate | Pause before DEV deployment | Required reviewers only |
-| `apim-bpimb-dev` | Credential Store | Azure authentication | Secrets (Client ID, Subscription, etc.) |
 | `approve-apim-bpimb-qa` | Approval Gate | Pause before QA deployment | Required reviewers only |
 | `apim-bpimb-qa` | Credential Store | Azure authentication | Secrets (Client ID, Subscription, etc.) |
 
-**Why Two Environments Per Target?**
+**Why Separate Environments?**
 
 Without this separation, deployment jobs would need to reference the same environment twice:
 1. Once for approval (at job start)
@@ -660,37 +625,35 @@ Without this separation, deployment jobs would need to reference the same enviro
 **Example from run-publisher.yaml**:
 ```yaml
 # Approval job - references approval environment
-approve-dev-deployment:
+approve-qa-deployment:
   runs-on: ubuntu-latest
   environment: 
-    name: approve-apim-bpimb-dev  # Contains reviewers, no secrets
+    name: approve-apim-bpimb-qa  # Contains reviewers, no secrets
   steps:
-    - name: DEV deployment approved
-      run: echo "Proceeding with DEV deployment..."
+    - name: QA deployment approved
+      run: echo "Proceeding with QA deployment..."
 
 # Deployment job - references credential environment via reusable workflow
-Deploy-To-DEV-With-Commit-ID:
-  needs: approve-dev-deployment
+Deploy-To-QA-With-Commit-ID:
+  needs: approve-qa-deployment
   uses: ./.github/workflows/run-publisher-with-env.yaml
   with:
-    API_MANAGEMENT_ENVIRONMENT: apim-bpimb-dev # Contains secrets, no reviewers
-    CONFIGURATION_YAML_PATH: configuration.dev.yaml
+    API_MANAGEMENT_ENVIRONMENT: apim-bpimb-qa # Contains secrets, no reviewers
+    CONFIGURATION_YAML_PATH: configuration.qa.yaml
   secrets: inherit
 ```
 
 **Configuration Steps**:
 
-1. **Create Approval Environments** (GitHub Settings → Environments):
-   - Create `approve-apim-bpimb-dev`
+1. **Create Approval Environment** (GitHub Settings → Environments):
+   - Create `approve-apim-bpimb-qa`
    - Add required reviewers (e.g., team leads)
    - ❌ Do NOT add any secrets
 
-2. **Create Credential Environments** (GitHub Settings → Environments):
-   - Create `apim-bpimb-dev`
+2. **Create Credential Environment** (GitHub Settings → Environments):
+   - Create `apim-bpimb-qa`
    - Add Azure secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME`, `APIM_SUBSCRIPTION_KEY`
    - ❌ Do NOT add required reviewers
-
-3. **Repeat for QA**: Create `approve-apim-bpimb-qa` (reviewers only) and `apim-bpimb-qa` (secrets only)
 
 **Troubleshooting Approval Issues**:
 
@@ -763,14 +726,14 @@ gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-artifacts-in-las
 
 **Usage**:
 ```bash
-# Test prod environment health
-gh workflow run test-apis.yaml -f ENVIRONMENT=prod -f TEST_TYPE=health-check
+# Test qa environment health
+gh workflow run test-apis.yaml -f ENVIRONMENT=qa -f TEST_TYPE=health-check
 
 # Test specific API
-gh workflow run test-apis.yaml -f ENVIRONMENT=prod -f API_NAME=echo-api -f TEST_TYPE=endpoint-availability
+gh workflow run test-apis.yaml -f ENVIRONMENT=qa -f API_NAME=echo-api -f TEST_TYPE=endpoint-availability
 
 # Run full test suite
-gh workflow run test-apis.yaml -f ENVIRONMENT=prod -f TEST_TYPE=full-suite
+gh workflow run test-apis.yaml -f ENVIRONMENT=qa -f TEST_TYPE=full-suite
 ```
 
 ---
@@ -819,14 +782,14 @@ gh workflow run test-apis.yaml -f ENVIRONMENT=prod -f TEST_TYPE=full-suite
 
 **Usage**:
 ```bash
-# Test dev environment
-gh workflow run test-apis-ephemeral.yaml -f ENVIRONMENT=dev -f TEST_TYPE=health-check
+# Test qa environment
+gh workflow run test-apis-ephemeral.yaml -f ENVIRONMENT=qa -f TEST_TYPE=health-check
 
-# Test specific API in prod
-gh workflow run test-apis-ephemeral.yaml -f ENVIRONMENT=prod -f API_NAME=opentext -f TEST_TYPE=endpoint-availability
+# Test specific API in qa
+gh workflow run test-apis-ephemeral.yaml -f ENVIRONMENT=qa -f API_NAME=opentext -f TEST_TYPE=endpoint-availability
 
-# Full suite on prod
-gh workflow run test-apis-ephemeral.yaml -f ENVIRONMENT=prod -f TEST_TYPE=full-suite
+# Full suite on qa
+gh workflow run test-apis-ephemeral.yaml -f ENVIRONMENT=qa -f TEST_TYPE=full-suite
 ```
 
 **Cost**: ~$0.01-0.02 per test run (5-10 minutes of B1s VM time)
@@ -940,7 +903,7 @@ If you receive false positive notifications:
 - ✅ Dry run mode to preview changes before deploying
 - ✅ Automatic validation of rollback target
 - ✅ Diff preview showing what will change
-- ✅ Approval gates for QA rollbacks (DEV rollbacks require no approval)
+- ✅ Approval gates for QA rollbacks
 - ✅ Post-rollback verification tests
 - ✅ Deployment audit trail
 - ✅ Automatic creation of new deployment tag after successful rollback
@@ -950,10 +913,10 @@ If you receive false positive notifications:
 
 Every successful deployment (with passing tests) is automatically tagged:
 - **Format**: `deploy-{env}-{timestamp}-{short-sha}`
-- **Example**: `deploy-dev-20260112-214435-0015df2`
+- **Example**: `deploy-qa-20260112-214435-0015df2`
 - **Metadata**: Includes deployer, timestamp, workflow ID
-- **Created by**: `Tag-DEV-Deployment` and `Tag-QA-Deployment` jobs in publisher workflow
-- **Trigger**: Runs after successful tests (Test-DEV-After-Deploy / Test-QA-After-Deploy)
+- **Created by**: `Tag-QA-Deployment` job in publisher workflow
+- **Trigger**: Runs after successful tests (Test-QA-After-Deploy)
 
 **Production Test Results (January 12, 2026)**:
 
@@ -970,7 +933,7 @@ Successfully executed end-to-end rollback workflow:
 
 ## 🚨 Step-by-Step Recovery Guide
 
-**Scenario**: A deployment to DEV or QA has caused API failures and you need to rollback immediately.
+**Scenario**: A deployment to QA has caused API failures and you need to rollback immediately.
 
 ### Step 1: Identify the Problem
 
@@ -1035,25 +998,25 @@ git for-each-ref --sort=-creatordate --format '%(creatordate:short) %(refname:sh
 git tag -l "deploy-dev-*" --sort=-creatordate | head -2
 
 # Output example:
-# deploy-dev-20260112-214435-0015df2  <- CURRENT (broken)
-# deploy-dev-20260112-201504-0015df2  <- USE THIS for rollback
+# deploy-qa-20260112-214435-0015df2  <- CURRENT (broken)
+# deploy-qa-20260112-201504-0015df2  <- USE THIS for rollback
 ```
 
 **Method B: Investigate commit history**
 ```bash
 # View what changed in each deployment
-git show deploy-dev-20260112-214435-0015df2  # Current broken deployment
-git show deploy-dev-20260112-201504-0015df2  # Previous deployment
+git show deploy-qa-20260112-214435-0015df2  # Current broken deployment
+git show deploy-qa-20260112-201504-0015df2  # Previous deployment
 
 # View commit log between tags
-git log deploy-dev-20260112-201504-0015df2..deploy-dev-20260112-214435-0015df2 --oneline
+git log deploy-qa-20260112-201504-0015df2..deploy-qa-20260112-214435-0015df2 --oneline
 
 # Example output:
 # d4dd75e test: Add breaking change to test API for rollback testing
 # ^ This shows what will be rolled back
 
 # View actual file changes
-git diff deploy-dev-20260112-201504-0015df2 deploy-dev-20260112-214435-0015df2 -- apimartifacts/
+git diff deploy-qa-20260112-201504-0015df2 deploy-qa-20260112-214435-0015df2 -- apimartifacts/
 ```
 
 **Method C: Check workflow runs to find last successful deployment**
@@ -1063,7 +1026,7 @@ gh run list --workflow=run-publisher.yaml --limit 10 --json conclusion,createdAt
 
 # Find the last successful run BEFORE the problem
 # Note the commit SHA and find its deployment tag
-git tag --contains <commit-sha> | grep deploy-dev
+git tag --contains <commit-sha> | grep deploy-qa
 ```
 
 ### Step 4: Preview the Rollback (DRY RUN)
@@ -1073,8 +1036,8 @@ git tag --contains <commit-sha> | grep deploy-dev
 ```bash
 # Run dry-run preview
 gh workflow run rollback-deployment.yaml \
-  -f ENVIRONMENT=apim-bpimb-dev \
-  -f ROLLBACK_TARGET=deploy-dev-20260112-201504-0015df2 \
+  -f ENVIRONMENT=apim-bpimb-qa \
+  -f ROLLBACK_TARGET=deploy-qa-20260112-201504-0015df2 \
   -f DRY_RUN=true
 
 # Wait a few seconds for workflow to start
@@ -1103,8 +1066,8 @@ gh run watch <run-id>
 ```bash
 # Execute the rollback (NO dry-run flag)
 gh workflow run rollback-deployment.yaml \
-  -f ENVIRONMENT=apim-bpimb-dev \
-  -f ROLLBACK_TARGET=deploy-dev-20260112-201504-0015df2 \
+  -f ENVIRONMENT=apim-bpimb-qa \
+  -f ROLLBACK_TARGET=deploy-qa-20260112-201504-0015df2 \
   -f DRY_RUN=false
 
 # Get the workflow run ID
@@ -1125,7 +1088,7 @@ watch -n 10 "gh run view $RUN_ID"
 gh run view $RUN_ID --web
 
 # Click "Review deployments" button
-# Select "approve-qa-rollback" environment
+# Select "approve-qa-deployment" environment
 # Click "Approve and deploy"
 ```
 
@@ -1134,7 +1097,7 @@ gh run view $RUN_ID --web
 **The rollback workflow automatically**:
 - ✅ Triggers the publisher to deploy the rollback target
 - ✅ Runs test suite to verify APIs are working
-- ✅ Creates a new deployment tag (e.g., `deploy-dev-20260112-221500-0015df2`)
+- ✅ Creates a new deployment tag (e.g., `deploy-qa-20260112-221500-0015df2`)
 
 **Manual verification steps**:
 
@@ -1154,11 +1117,11 @@ gh run view $TEST_RUN
 
 # 4. Verify new deployment tag was created
 git fetch --tags
-git tag -l "deploy-dev-*" --sort=-creatordate | head -3
+git tag -l "deploy-qa-*" --sort=-creatordate | head -3
 # Should show a new tag with the same commit SHA as your rollback target
 
 # 5. Test APIs manually
-curl -H "Ocp-Apim-Subscription-Key: $KEY" https://niaid-bpimb-apim-dev.azure-api.net/your-api
+curl -H "Ocp-Apim-Subscription-Key: $KEY" https://niaid-bpimb-apim-qa.azure-api.net/your-api
 # Should return expected response (not 500/502/503)
 ```
 
@@ -1188,7 +1151,7 @@ This keeps history clean and prevents the broken code from being redeployed.
 **Use this decision tree**:
 
 ```
-Problem detected in DEV or QA
+Problem detected in QA
     │
     ├─→ Do you know when the problem started?
     │   YES → Find deployment tags from before that time

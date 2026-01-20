@@ -1,8 +1,8 @@
 name: Run - Extractor
 
-# PIPELINE: DEV → Repository → PRODUCTION
-# This workflow extracts APIM artifacts from DEV environment (nih-niaid-avidpoc-dev-rg)
-# Extracted artifacts are stored in apimartifacts/ folder for deployment to PRODUCTION
+# PIPELINE: DEV → Repository → QA → PROD
+# This workflow extracts APIM artifacts from DEV environment (niaid-bpimb-apim-dev)
+# Extracted artifacts are stored in apimartifacts/ folder for deployment to QA and PROD
 
 on:
   workflow_dispatch:
@@ -22,7 +22,7 @@ env:
 jobs:
   extract:
     runs-on: ubuntu-latest
-    environment: apim-daids-connect # Extractor source: apim-daids-connect
+    environment: apim-bpimb-dev # Extractor source: apim-bpimb-dev
     steps:
       - uses: actions/checkout@v4
       
