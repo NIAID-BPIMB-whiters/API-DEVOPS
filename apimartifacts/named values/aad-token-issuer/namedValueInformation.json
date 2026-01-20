@@ -1,7 +1,0 @@
-{
-  "properties": {
-    "displayName": "aad-token-issuer",
-    "secret": false,
-    "value": "https://otdsext-dev.niaid.nih.gov/otdsws"
-  }
-}
