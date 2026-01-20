@@ -1,6 +1,7 @@
 {
   "properties": {
-    "scope": "/subscriptions/18fc6b8b-44fa-47d7-ae51-36766ac67165/resourceGroups/nih-niaid-avidpoc-dev-rg/providers/Microsoft.ApiManagement/service/apim-daids-connect/products/starter",
+    "displayName": "Product Starter subscription",
+    "scope": "/subscriptions/18fc6b8b-44fa-47d7-ae51-36766ac67165/resourceGroups/niaid-bpimb-apim-dev-rg/providers/Microsoft.ApiManagement/service/niaid-bpimb-apim-dev/products/starter",
     "allowTracing": false,
     "state": "active"
   }

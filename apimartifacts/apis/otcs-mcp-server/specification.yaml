@@ -4,7 +4,7 @@ info:
   description: ''
   version: '1.0'
 servers:
-  - url: https://gateway.apimdev.niaid.nih.gov/otcs-mcp
+  - url: https://niaid-bpimb-apim-dev.azure-api.net/otcs-mcp
 paths:
   /mcp:
     get:
