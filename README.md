@@ -2648,8 +2648,8 @@ gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in
 
 ### 3. Add Environment Naming Reference Table
 **Priority**: High  
-**Status**: ⏳ Pending  
-**Last Reviewed**: January 8, 2026
+**Status**: ✅ **COMPLETED** - January 26, 2026
+**Last Reviewed**: January 26, 2026
 
 **Objective**: Create clear mapping between GitHub environments, APIM services, and Azure resources
 
@@ -2658,11 +2658,13 @@ gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in
 - New team members need quick reference for which environment corresponds to which APIM instance
 - Documentation uses various naming conventions that could be confusing
 
-**Tasks**:
-- [ ] Add environment reference table at top of README (after Overview section)
-- [ ] Include: GitHub environment name, APIM service name, resource group, purpose, network details
-- [ ] Document approval environments (approve-apim-bpimb-dev, approve-apim-bpimb-qa)
-- [ ] Clarify which secrets belong to which environment
+**Completed Tasks**:
+- [x] Enhanced existing Environments section with comprehensive reference table
+- [x] Added missing approve-apim-bpimb-dev approval environment to table
+- [x] Included Secrets column showing which credentials belong to each environment
+- [x] Added Environment Types section explaining credential vs approval environments
+- [x] Clarified GitHub environment protection rules and required reviewers
+- [x] Documented both approval environments (approve-apim-bpimb-dev, approve-apim-bpimb-qa)
 
 **Impact**: Reduces onboarding time, eliminates environment confusion, clearer documentation
 
