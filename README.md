@@ -2732,21 +2732,24 @@ gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in
 
 ### 7. Remove itpms-chat-api from Extractor Config
 **Priority**: High  
-**Status**: ⏳ Pending  
-**Last Reviewed**: January 8, 2026
+**Status**: ✅ **COMPLETED** - January 26, 2026
+**Last Reviewed**: January 26, 2026
 
 **Objective**: Clean up extractor configuration to remove deleted API
 
 **Background**:
 - `itpms-chat-api` was removed on December 26, 2025 (POC cleanup)
-- Still listed in configuration.extractor.yaml line 24
-- Extractor will fail or skip this API, causing warnings
+- Still referenced in test workflow ALL_APIS lists
+- Workflows would attempt to test non-existent API
 
-**Tasks**:
-- [ ] Remove `itpms-chat-api` from configuration.extractor.yaml
-- [ ] Update ALL_APIS environment variable in test-apis-ephemeral.yaml
-- [ ] Test extraction to verify no warnings
-- [ ] Document removal in commit message
+**Completed Tasks**:
+- [x] Remove `itpms-chat-api` from test-apis.yaml ALL_APIS list
+- [x] **BONUS**: Made both test workflows dynamic - they now query APIM directly for current APIs
+- [x] Added fallback to static lists if APIM query fails
+- [x] New APIs will be automatically tested without manual updates
+- [x] Documented changes in commit message
+
+**Impact**: Cleaner test runs, automatic API discovery, future-proof testing
 
 **Impact**: Clean extractor runs, no warnings, accurate configuration
 
