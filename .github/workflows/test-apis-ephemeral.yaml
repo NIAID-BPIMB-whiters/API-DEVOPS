@@ -35,6 +35,9 @@ on:
         type: string
 
 env:
+  # Fallback list of APIs used if APIM query fails
+  # The workflow now dynamically queries APIM for current APIs by default
+  # This static list ensures testing can still proceed if Azure CLI fails
   ALL_APIS: crms-api-qa,demo-conference-api,echo-api,merlin-db,opentext,otcs-mcp-server,test
 
 jobs:
@@ -153,7 +156,20 @@ jobs:
           
           # Determine which APIs to test
           if [ -z "${{ github.event.inputs.API_NAME }}" ]; then
-            APIS_TO_TEST="${{ env.ALL_APIS }}"
+            echo "No specific API provided. Querying all current APIs from APIM..."
+            # Dynamically query APIM for current APIs
+            APIS_TO_TEST=$(az apim api list \
+              --resource-group ${{ secrets.AZURE_RESOURCE_GROUP_NAME }} \
+              --service-name ${{ secrets.API_MANAGEMENT_SERVICE_NAME }} \
+              --query "[?isCurrent==\`true\`].name" \
+              -o tsv | tr '\n' ',' | sed 's/,$//')
+            
+            if [ $? -ne 0 ] || [ -z "$APIS_TO_TEST" ]; then
+              echo "Failed to query APIM APIs. Falling back to static list."
+              APIS_TO_TEST="${{ env.ALL_APIS }}"
+            else
+              echo "Found APIs in APIM: $APIS_TO_TEST"
+            fi
           else
             APIS_TO_TEST="${{ github.event.inputs.API_NAME }}"
           fi

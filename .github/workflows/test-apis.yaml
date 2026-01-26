@@ -32,9 +32,10 @@ on:
           - full-suite            # Runs all available tests
 
 env:
-  # Complete list of APIs extracted from dev environment
-  # Used when no specific API is provided in API_NAME input
-  ALL_APIS: "crms-api-qa,demo-conference-api,echo-api,itpms-chat-api,merlin-db,opentext,otcs-mcp-server,test"
+  # Fallback list of APIs used if APIM query fails
+  # The workflow now dynamically queries APIM for current APIs by default
+  # This static list ensures testing can still proceed if Azure CLI fails
+  ALL_APIS: "crms-api-qa,demo-conference-api,echo-api,merlin-db,opentext,otcs-mcp-server,test"
 
 jobs:
   # =============================================================================
@@ -49,11 +50,15 @@ jobs:
     outputs:
       apim-gateway: ${{ steps.config.outputs.apim-gateway }}  # APIM gateway URL for the selected environment
       apis-to-test: ${{ steps.config.outputs.apis-to-test }}  # Comma-separated list of APIs to test
+    environment: ${{ github.event.inputs.ENVIRONMENT }}  # Required for Azure authentication
     steps:
       - uses: actions/checkout@v4
       
       - name: Configure environment settings
         id: config
+        env:
+          API_MANAGEMENT_SERVICE_NAME: ${{ secrets.API_MANAGEMENT_SERVICE_NAME }}
+          AZURE_RESOURCE_GROUP_NAME: ${{ secrets.AZURE_RESOURCE_GROUP_NAME }}
         run: |
           # Set APIM gateway URL based on selected environment
           if ("${{ github.event.inputs.ENVIRONMENT }}" -eq "prod") {
@@ -66,8 +71,23 @@ jobs:
           
           # Determine which APIs to test
           if ([string]::IsNullOrEmpty("${{ github.event.inputs.API_NAME }}")) {
-            # No specific API provided - test all APIs
-            "apis-to-test=${{ env.ALL_APIS }}" >> $env:GITHUB_OUTPUT
+            # No specific API provided - dynamically query all current APIs from APIM
+            Write-Host "No specific API provided. Querying all current APIs from APIM..."
+            
+            $apimApis = & az apim api list `
+              --resource-group "$env:AZURE_RESOURCE_GROUP_NAME" `
+              --service-name "$env:API_MANAGEMENT_SERVICE_NAME" `
+              --query "[?isCurrent==\`true\`].name" `
+              -o tsv
+            
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "[ERROR] Failed to query APIM APIs. Falling back to static list."
+              "apis-to-test=${{ env.ALL_APIS }}" >> $env:GITHUB_OUTPUT
+            } else {
+              $apiList = ($apimApis | Where-Object { $_ -and $_.Trim() } | Sort-Object) -join ","
+              Write-Host "Found APIs in APIM: $apiList"
+              "apis-to-test=$apiList" >> $env:GITHUB_OUTPUT
+            }
           } else {
             # Test only the specified API
             "apis-to-test=${{ github.event.inputs.API_NAME }}" >> $env:GITHUB_OUTPUT
