@@ -21,6 +21,7 @@ on:
 jobs:
   check-orphaned-resources:
     runs-on: ubuntu-latest
+    environment: apim-bpimb-dev  # Add environment to access Azure secrets
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
