@@ -61,20 +61,33 @@ This repository implements **GitOps for Azure API Management (APIM)** using Micr
 
 ## Environments
 
-This repository manages two APIM instances with four GitHub environments (two credential environments + two approval gates), with PROD deployment planned for future implementation:
+This repository manages two APIM instances with **four GitHub environments** (two credential environments + two approval gates), with PROD deployment planned for future implementation:
 
-| GitHub Environment | Purpose | APIM Service | Resource Group | Network |
-|-------------------|---------|--------------|----------------|---------|
-| **apim-bpimb-dev** | Extractor source | niaid-bpimb-apim-dev | nih-niaid-azurestrides-dev-rg-apim-az | Internal VNet |
-| **apim-bpimb-qa** | QA deployment target | niaid-bpimb-apim-qa | nih-niaid-azurestrides-dev-rg-apim-az | Internal VNet |
-| **apim-bpimb-prod** | PROD deployment target | TBD | TBD | TBD |
-| **approve-apim-bpimb-qa** | QA approval gate | N/A - approval only | N/A | N/A |
+| GitHub Environment | Purpose | APIM Service | Resource Group | Network | Secrets |
+|-------------------|---------|--------------|----------------|---------|---------|
+| **apim-bpimb-dev** | Extractor source & DEV deployment | niaid-bpimb-apim-dev | nih-niaid-azurestrides-dev-rg-apim-az | Internal VNet | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME` |
+| **apim-bpimb-qa** | QA deployment target | niaid-bpimb-apim-qa | nih-niaid-azurestrides-dev-rg-apim-az | Internal VNet | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME`, `APIM_SUBSCRIPTION_KEY` |
+| **apim-bpimb-prod** | PROD deployment target (planned) | TBD | TBD | TBD | TBD |
+| **approve-apim-bpimb-dev** | DEV deployment approval gate | N/A - approval only | N/A | N/A | None (reviewers only) |
+| **approve-apim-bpimb-qa** | QA deployment approval gate | N/A - approval only | N/A | N/A | None (reviewers only) |
 
-**Environment Secrets** (stored in GitHub environment settings):
-- **apim-bpimb-dev**: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME` (niaid-bpimb-apim-dev)
-- **apim-bpimb-qa**: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME` (niaid-bpimb-apim-qa), `APIM_SUBSCRIPTION_KEY`
+### Environment Types
 
-**Approval Environments** are configured with required reviewers to gate deployments to QA.
+**Credential Environments** (`apim-*`): Contain Azure authentication secrets and are used for actual deployments and API queries.
+
+**Approval Environments** (`approve-*`): Contain only required reviewers for manual approval gates. No secrets are stored here to prevent deployment without proper review.
+
+### Environment Secrets
+
+**GitHub Environment Settings** → **Secrets** (stored securely, not in repository):
+
+- **`apim-bpimb-dev`**: Azure service principal credentials for DEV APIM access
+- **`apim-bpimb-qa`**: Azure service principal credentials for QA APIM access + subscription key for testing
+
+**GitHub Environment Settings** → **Environment protection rules** (required reviewers):
+
+- **`approve-apim-bpimb-dev`**: Team leads must approve DEV deployments
+- **`approve-apim-bpimb-qa`**: Team leads must approve QA deployments
 
 ### Network Architecture
 
