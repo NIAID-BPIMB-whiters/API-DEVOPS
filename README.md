@@ -2039,6 +2039,124 @@ When publisher runs:
 
 ---
 
+## Cross-Environment Architecture
+
+### The Challenge: Environment-Specific Resources
+
+When deploying APIM artifacts across different environments (DEV → QA), many resources contain **hardcoded environment-specific references** that don't work when deployed to other environments:
+
+- **Application Insights Loggers**: Reference specific App Insights instances by resource ID
+- **Key Vault Secrets**: Use environment-specific Key Vault URLs
+- **Backend Services**: Point to environment-specific endpoints
+- **Named Values**: May contain environment-specific connection strings
+
+**Problem**: Azure APIops v6.0.2 cannot automatically remap these resource references during deployment.
+
+### The Solution: Standardized Naming + Named Values
+
+This repository uses a **standardized naming pattern** where resources have identical names across environments, but their configurations point to environment-specific backing services via **named values**.
+
+#### Logger Standardization Example
+
+**Repository Artifact** (extracted from DEV):
+```xml
+<logger name="niaid-bpimb-apim-ai" type="applicationInsights">
+  <connectionString>{{apim-ai-connection-string}}</connectionString>
+</logger>
+```
+
+**Environment-Specific Configuration**:
+
+| Environment | Logger Name | Named Value | Key Vault Secret | Points To |
+|-------------|-------------|-------------|------------------|-----------|
+| **DEV** | `niaid-bpimb-apim-ai` | `apim-ai-connection-string` | `kv-niaid-bpimb-apim-dev` | `niaid-bpimb-apim-dev-ai` |
+| **QA** | `niaid-bpimb-apim-ai` | `apim-ai-connection-string` | `kv-niaid-bpimb-apim-qa` | `niaid-bpimb-apim-qa-ai` |
+
+**Result**: Same logger name, different backing App Insights per environment.
+
+### How Cross-Environment Deployment Works
+
+1. **Extract from DEV**: Artifacts use standardized names with named value placeholders
+2. **Deploy to QA**: Publisher applies `configuration.qa.yaml` which maps named values to QA Key Vault
+3. **Runtime Resolution**: APIM resolves named values to actual secrets at runtime
+
+```mermaid
+graph TD
+    subgraph "DEV Environment (Source)"
+        DEV_APIM[niaid-bpimb-apim-dev]
+        DEV_KV[kv-niaid-bpimb-apim-dev]
+        DEV_AI[niaid-bpimb-apim-dev-ai]
+        
+        DEV_APIM --> |extracts| REPO
+        DEV_KV -.-> |secrets| DEV_APIM
+        DEV_APIM -.-> |logs to| DEV_AI
+    end
+    
+    subgraph "Repository (Standardized)"
+        LOGGER[logger: niaid-bpimb-apim-ai<br/>connectionString: {{apim-ai-connection-string}}]
+        CONFIG_QA[configuration.qa.yaml<br/>maps named values to QA Key Vault]
+    end
+    
+    subgraph "QA Environment (Target)"
+        QA_APIM[niaid-bpimb-apim-qa]
+        QA_KV[kv-niaid-bpimb-apim-qa]
+        QA_AI[niaid-bpimb-apim-qa-ai]
+        
+        REPO --> |deploys| QA_APIM
+        CONFIG_QA -.-> |configures| QA_APIM
+        QA_KV -.-> |secrets| QA_APIM
+        QA_APIM -.-> |logs to| QA_AI
+    end
+    
+    style DEV_APIM fill:#fff4e6
+    style QA_APIM fill:#f0f5ff
+    style REPO fill:#f6ffed
+```
+
+### What APIops Can and Cannot Remap
+
+**✅ APIops CAN remap during deployment:**
+- Backend service URLs (via `serviceUrl` in configuration files)
+- Named value sources (via Key Vault `secretIdentifier`)
+- API Management service name (via `API_MANAGEMENT_SERVICE_NAME` secret)
+- Subscription scopes (via API path changes)
+
+**❌ APIops CANNOT remap during deployment:**
+- Logger resource IDs (requires standardized logger names)
+- Diagnostic logger references (tied to logger names)
+- Self-hosted gateway names (must match or be excluded)
+- Product IDs in subscription references (requires manual cleanup)
+
+### Benefits of This Architecture
+
+- **🔄 Automated Deployments**: No manual resource ID updates needed
+- **🛡️ Environment Isolation**: Each environment uses its own backing services
+- **📦 GitOps Compatible**: Repository artifacts are environment-agnostic
+- **🔧 Maintainable**: Add new environments by creating matching resource names
+- **🚀 Scalable**: Works for DEV → QA → PROD pipelines
+
+### Adding New Environments
+
+To add a PROD environment:
+
+1. **Create PROD infrastructure** with standardized names:
+   - APIM: `niaid-bpimb-apim-prod`
+   - Key Vault: `kv-niaid-bpimb-apim-prod`
+   - App Insights: `niaid-bpimb-apim-prod-ai`
+
+2. **Create configuration.prod.yaml**:
+   ```yaml
+   namedValues:
+     - name: apim-ai-connection-string
+       properties:
+         keyVault:
+           secretIdentifier: https://kv-niaid-bpimb-apim-prod.vault.azure.net/secrets/apim-ai-connection-string
+   ```
+
+3. **Deploy**: Publisher will automatically configure resources correctly.
+
+---
+
 ## Development Workflow
 
 ### Standard GitOps Pipeline
