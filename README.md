@@ -156,11 +156,11 @@ git push origin main
 
 ### Add a New API
 ```bash
-# 1. Run extractor to pull latest from DAIDS_DEV APIM
+# 1. Run extractor to pull latest from DEV APIM
 gh workflow run run-extractor.yaml
 
 # 2. New API appears in apimartifacts/apis/new-api/
-# 3. (Optional) Modify configuration.*.yaml to exclude from DEV/QA if needed
+# 3. (Optional) Modify configuration.*.yaml to exclude from QA if needed
 # 4. Commit and push - publisher workflow deploys automatically
 ```
 
@@ -175,7 +175,7 @@ gh workflow run test-apis-ephemeral.yaml -f ENVIRONMENT=apim-bpimb-dev -f APIS="
 
 ### Trigger Extraction
 ```bash
-# Pull latest APIM config from DAIDS_DEV
+# Pull latest APIM config from DEV
 gh workflow run run-extractor.yaml
 ```
 
@@ -1808,7 +1808,7 @@ apis:
 
 #### Problem: Environment-Specific Resource IDs
 
-When extracting APIM artifacts from one environment (e.g., DAIDS_DEV) for deployment to another (e.g., DEV, QA), certain resources contain **environment-specific resource IDs** that won't work across environments:
+When extracting APIM artifacts from one environment (e.g., DEV) for deployment to another (e.g., QA), certain resources contain **environment-specific resource IDs** that won't work across environments:
 
 - **Loggers** reference Application Insights via connection strings stored in **Named Values**
 - **Diagnostics** reference specific logger resource IDs
@@ -1836,7 +1836,6 @@ Each environment has a **named value** called `apim-ai-connection-string`, but t
 
 | Environment | Named Value Name | Value (Connection String Points To) |
 |-------------|------------------|-------------------------------------|
-| **DAIDS_DEV** | `apim-ai-connection-string` | `apim-daids-connect-ai` App Insights |
 | **DEV** | `apim-ai-connection-string` | `niaid-bpimb-apim-dev-ai` App Insights |
 | **QA** | `apim-ai-connection-string` | `niaid-bpimb-apim-qa-ai` App Insights |
 
@@ -1873,7 +1872,7 @@ The `configuration.dev.yaml` and `configuration.qa.yaml` files are used for **de
   - Connection String: Stored in named value `apim-ai-connection-string`
 - **Logger**: `niaid-bpimb-apim-ai` → references `apim-ai-connection-string`
 - **Storage Account**: `niaidapimdevdrzrs` (Standard_ZRS for backup/DR)
-- **Status**: Active deployment target; will become extraction source after DAIDS_DEV retirement
+- **Status**: Active extraction source and deployment target
 
 ##### QA (Testing Environment)
 - **APIM**: `niaid-bpimb-apim-qa` in `niaid-bpimb-apim-qa-rg`
@@ -1886,7 +1885,7 @@ The `configuration.dev.yaml` and `configuration.qa.yaml` files are used for **de
 
 **Deployment Flow:**
 ```
-DAIDS_DEV (extract) → Repository (standardized names) → DEV (deploy + test) → QA (deploy + test)
+DEV (extract) → Repository (standardized names) → QA (deploy + test)
 ```
 
 **Note**: Production environment setup is planned for future implementation.
@@ -1901,34 +1900,24 @@ DAIDS_DEV (extract) → Repository (standardized names) → DEV (deploy + test) 
 
 This repository implements a **source-target** architecture:
 
-- **Source Environment (apim-daids-connect / DAIDS_DEV)**: Where API artifacts are extracted FROM
-- **Target Environments (apim-bpimb-dev / DEV, apim-bpimb-qa / QA)**: Where API artifacts are deployed TO
+- **Source Environment (apim-bpimb-dev / DEV)**: Where API artifacts are extracted FROM
+- **Target Environment (apim-bpimb-qa / QA)**: Where API artifacts are deployed TO
 
 ```mermaid
 graph TD
-    subgraph Source["Source Environment (DAIDS_DEV)"]
-        DAIDS[niaid-daids-connect-apim<br/>Internal VNet]
-        DAIDS_AI[apim-daids-connect-ai<br/>Application Insights]
-        DAIDS --> |logs to| DAIDS_AI
+    subgraph Source["Source Environment (DEV)"]
+        DEV_SRC[niaid-bpimb-apim-dev<br/>Internal VNet<br/>🚀 Extractor Source]
+        DEV_SRC --> |logs to| DEV_AI_SRC
     end
     
     subgraph Repo["Git Repository (API-DEVOPS)"]
         direction TB
         APIS[APIs<br/>Policies<br/>Backends]
-        CONFIG_DEV[configuration.dev.yaml<br/>DEV remapping]
         CONFIG_QA[configuration.qa.yaml<br/>QA remapping]
         ARTIFACTS[apimartifacts/<br/>Standardized Names]
     end
     
-    subgraph DEV["DEV Environment"]
-        DEV_APIM[niaid-bpimb-apim-dev<br/>Internal VNet]
-        DEV_AI[niaid-bpimb-apim-dev-ai<br/>Application Insights]
-        DEV_KV[kv-niaid-bpimb-apim-dev<br/>Key Vault]
-        DEV_APIM --> |logs to| DEV_AI
-        DEV_APIM --> |secrets from| DEV_KV
-    end
-    
-    subgraph QA["QA Environment"]
+    subgraph QA["QA Environment (Target)"]
         QA_APIM[niaid-bpimb-apim-qa<br/>Internal VNet]
         QA_AI[niaid-bpimb-apim-qa-ai<br/>Application Insights]
         QA_KV[kv-niaid-bpimb-apim-qa<br/>Key Vault]
@@ -1936,23 +1925,20 @@ graph TD
         QA_APIM --> |secrets from| QA_KV
     end
     
-    DAIDS -->|Extractor<br/>run-extractor.yaml| ARTIFACTS
-    ARTIFACTS -->|Publisher + DEV config<br/>run-publisher.yaml| DEV_APIM
+    DEV_SRC -->|Extractor<br/>run-extractor.yaml| ARTIFACTS
     ARTIFACTS -->|Publisher + QA config<br/>run-publisher.yaml| QA_APIM
-    CONFIG_DEV -.->|remaps resources| DEV_APIM
     CONFIG_QA -.->|remaps resources| QA_APIM
     
-    style DAIDS fill:#fff4e6
-    style DEV_APIM fill:#e6f7ff
+    style DEV_SRC fill:#fff4e6
     style QA_APIM fill:#f0f5ff
     style ARTIFACTS fill:#f6ffed
 ```
 
 **Why This Pattern?**
-- DAIDS_DEV is the **authoritative source** for API definitions and policies
-- DEV and QA are **isolated deployment targets** with their own infrastructure
-- Changes are tested in DEV before promoting to QA
-- Each target environment uses **environment-specific configurations** (Key Vault URLs, backend endpoints, etc.)
+- DEV is the **authoritative source** for API definitions and policies
+- QA is an **isolated deployment target** with its own infrastructure
+- Changes are tested in QA after extraction from DEV
+- QA environment uses **environment-specific configurations** (Key Vault URLs, backend endpoints, etc.)
 
 ### Standardized Resource Naming
 
@@ -1962,24 +1948,15 @@ The most critical architectural decision: **resource names are standardized acro
 
 | Environment | Logger Name (in APIM) | Backing App Insights Resource |
 |-------------|----------------------|------------------------------|
-| DAIDS_DEV   | `niaid-bpimb-apim-ai` | `apim-daids-connect-ai` |
 | DEV         | `niaid-bpimb-apim-ai` | `niaid-bpimb-apim-dev-ai` |
 | QA          | `niaid-bpimb-apim-ai` | `niaid-bpimb-apim-qa-ai` |
 
 ```mermaid
 graph LR
-    subgraph DAIDS_DEV["DAIDS_DEV Environment"]
-        DAIDS_LOGGER[Logger: niaid-bpimb-apim-ai]
-        DAIDS_NV[Named Value:<br/>apim-ai-connection-string]
-        DAIDS_APPINS[App Insights:<br/>apim-daids-connect-ai]
-        DAIDS_LOGGER --> |references| DAIDS_NV
-        DAIDS_NV --> |connection to| DAIDS_APPINS
-    end
-    
     subgraph DEV["DEV Environment"]
-        DEV_LOGGER[Logger: niaid-bpimb-apim-ai<br/>SAME NAME]
-        DEV_NV[Named Value:<br/>apim-ai-connection-string<br/>SAME NAME]
-        DEV_APPINS[App Insights:<br/>niaid-bpimb-apim-dev-ai<br/>DIFFERENT RESOURCE]
+        DEV_LOGGER[Logger: niaid-bpimb-apim-ai]
+        DEV_NV[Named Value:<br/>apim-ai-connection-string]
+        DEV_APPINS[App Insights:<br/>niaid-bpimb-apim-dev-ai]
         DEV_LOGGER --> |references| DEV_NV
         DEV_NV --> |connection to| DEV_APPINS
     end
@@ -2008,29 +1985,23 @@ graph LR
 
 **How It Works:**
 
-1. **Repository contains**: Logger named `niaid-bpimb-apim-ai` (from DAIDS_DEV extraction)
-2. **DEV deployment**: Creates/updates `niaid-bpimb-apim-ai` logger in DEV APIM
+1. **Repository contains**: Logger named `niaid-bpimb-apim-ai` (from DEV extraction)
+2. **QA deployment**: Creates/updates `niaid-bpimb-apim-ai` logger in QA APIM
 3. **Logger configuration**: Uses named value `apim-ai-connection-string` for connection
-4. **Environment-specific config**: `configuration.dev.yaml` sets `apim-ai-connection-string` to DEV Key Vault secret
+4. **Environment-specific config**: `configuration.qa.yaml` sets `apim-ai-connection-string` to QA Key Vault secret
 5. **Result**: Same logger name, different backing service per environment
 
 **Configuration Example:**
 
 ```yaml
-# configuration.dev.yaml
+# configuration.qa.yaml
 namedValues:
   - name: apim-ai-connection-string
     properties:
       displayName: apim-ai-connection-string
       keyVault:
-        secretIdentifier: https://kv-niaid-bpimb-apim-dev.vault.azure.net/secrets/apim-ai-connection-string
-
-# configuration.qa.yaml  
-namedValues:
-  - name: apim-ai-connection-string
-    properties:
-      displayName: apim-ai-connection-string
-      keyVault:
+        secretIdentifier: https://kv-niaid-bpimb-apim-qa.vault.azure.net/secrets/apim-ai-connection-string
+```
         secretIdentifier: https://kv-niaid-bpimb-apim-qa.vault.azure.net/secrets/apim-ai-connection-string
 ```
 
@@ -2062,7 +2033,7 @@ Think of the repository as containing:
 
 When publisher runs:
 1. Takes artifacts from `apimartifacts/` (standardized names)
-2. Applies `configuration.dev.yaml` or `configuration.qa.yaml` (environment customization)
+2. Applies `configuration.qa.yaml` (environment customization)
 3. Deploys to target APIM (creates/updates resources with standardized names)
 4. Resources fetch environment-specific values from Key Vault (via named values)
 
