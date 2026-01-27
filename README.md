@@ -2272,9 +2272,10 @@ Configure in **Settings → Secrets and variables → Actions → Environments**
 
 ### Service Principal Configuration
 
-**DEV Environment** (`github-apidevops-dev`):
-- **App ID**: `95ca13e0-4df1-4df7-9090-7ac57745a273`
-- **Created**: December 26, 2025
+**DEV Environment** (`sp-niaid-bpimb-apim-dev`):
+- **App ID**: `db9f206a-1f88-4ba7-b702-c3230bfd1e14`
+- **Object ID**: `04e45bf9-e8fe-4a88-a08b-3a40b21d50fc`
+- **Updated**: January 27, 2026 (renamed from `sp-niaid-apim-prod`)
 - **Roles**:
   - `API Management Service Contributor` on `niaid-bpimb-apim-dev-rg` resource group
   - `Reader` on `niaid-bpimb-apim-dev-rg` (for Azure Advisor)
@@ -2356,7 +2357,7 @@ For service principals used in GitHub Actions workflows:
 **Required Permissions for Ephemeral VM Testing**:
 - Contributor role on VM resource group
 - Contributor role on VNet resource group (cross-RG subnet access)
-- Service Principal: `github-apidevops-workflow` (a763a856-d2ae-43ab-b686-0cf24a5da690)
+- Service Principal: `sp-niaid-bpimb-apim-dev` (db9f206a-1f88-4ba7-b702-c3230bfd1e14)
 
 ---
 
