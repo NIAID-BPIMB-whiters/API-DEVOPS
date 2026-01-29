@@ -72,8 +72,8 @@ jobs:
           if [ "${{ github.event.inputs.ENVIRONMENT }}" == "apim-bpimb-dev" ]; then
             RG="nih-niaid-azurestrides-dev-rg-admin-az"
             VNET_RG="nih-niaid-azurestrides-dev-rg-admin-az"
-            VNET="nih-niaid-azurestrides-bpimb-dev-apim-az"
-            SUBNET="dev-commonservices"
+            VNET="nih-niaid-azurestrides-dev-apim-az"
+            SUBNET="niaid-commonservices-test"
           elif [ "${{ github.event.inputs.ENVIRONMENT }}" == "apim-bpimb-qa" ]; then
             RG="nih-niaid-azurestrides-dev-rg-admin-az"
             VNET_RG="nih-niaid-azurestrides-dev-rg-admin-az"
@@ -142,7 +142,7 @@ jobs:
           # Determine APIM gateway based on environment
           if [ "${{ github.event.inputs.ENVIRONMENT }}" == "apim-bpimb-dev" ]; then
             # Use private IP for apim-bpimb-dev (internal VNet)
-            APIM_GATEWAY="10.179.0.4"
+            APIM_GATEWAY="10.178.57.196"
             APIM_HOST="niaid-bpimb-apim-dev.azure-api.net"
           elif [ "${{ github.event.inputs.ENVIRONMENT }}" == "apim-bpimb-qa" ]; then
             # Use private IP for apim-bpimb-qa (internal VNet)
