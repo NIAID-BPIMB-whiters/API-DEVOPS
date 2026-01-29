@@ -9,6 +9,61 @@ Major infrastructure expansion to support sandbox development, production deploy
 
 ---
 
+## ✅ COMPLETED: BPIMB DEV APIM Migration to Shared Infrastructure (Reverted)
+
+**Date**: January 29, 2026  
+**Status**: ✅ **REVERTED TO EXTERNAL MODE**  
+
+### Migration Summary
+
+Initially migrated `niaid-bpimb-apim-dev` from External to Internal VNet mode to resolve SharePoint CRMS-API connectivity issues. However, Internal mode made the APIM management endpoint inaccessible from the Azure portal, preventing API management operations.
+
+**Final Resolution**: Reverted back to External VNet mode to maintain Azure portal access while preserving SharePoint integration capabilities.
+
+#### Key Changes Made
+
+**Network Configuration:**
+- ✅ **FINAL STATE**: APIM in External VNet mode with public access
+- ✅ Connected to `nih-niaid-azurestrides-bpimb-dev-apim-az` VNet
+- ✅ Public IP: `20.7.242.106`
+- ✅ Management endpoint accessible from Azure portal
+
+**Application Gateway Integration:**
+- ✅ Added BPIMB DEV APIM to `APIM-APP-GW-V2` backend pool
+- ✅ Configured health probes for APIM endpoints
+- ✅ Set up routing rules for internal traffic
+- ✅ Configured private frontend IP (10.178.57.9) for internal-only access
+
+**Infrastructure Updates:**
+- ✅ Created `bpimb-apim-dev` subnet (10.178.57.192/27)
+- ✅ Configured NSG with matching rules from working APIM
+- ✅ Enabled all required service endpoints (Key Vault, Storage, etc.)
+- ✅ Updated resource group from `nih-niaid-azurestrides-dev-rg-apim-az` to `niaid-bpimb-apim-dev-rg`
+
+#### Testing & Validation
+
+- ✅ Application Gateway health checks passing (200 status codes)
+- ✅ Traffic routing confirmed working through Gateway
+- ✅ APIM responds correctly to requests
+- ✅ Network connectivity established to NIH backends
+
+#### Final Configuration
+
+**Current State:**
+- DEV APIM: External mode with public access
+- Direct public access for SharePoint integration
+- Azure portal management fully functional
+- CORS enabled for web applications
+
+#### Documentation Updates Required
+
+- [x] Update README.md network architecture diagram
+- [x] Update environment table (DEV network mode)
+- [x] Update GitHub Actions workflows for Gateway-based testing
+- [x] Update troubleshooting guides for internal access patterns
+
+---
+
 ## 🎯 Initiative 1: Create Sandbox Environment
 
 ### Objective

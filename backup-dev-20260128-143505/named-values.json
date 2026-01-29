@@ -1,0 +1,28 @@
+﻿[
+    {
+        "displayName":  "apim-ai-connection-string",
+        "id":  "/subscriptions/18fc6b8b-44fa-47d7-ae51-36766ac67165/resourceGroups/niaid-bpimb-apim-dev-rg/providers/Microsoft.ApiManagement/service/niaid-bpimb-apim-dev/namedValues/apim-ai-connection-string",
+        "keyVault":  {
+                         "identityClientId":  null,
+                         "lastStatus":  "@{code=Success; message=; timeStampUtc=2026-01-28T16:52:04.833580+00:00}",
+                         "secretIdentifier":  "https://kv-niaid-bpimb-apim-dev.vault.azure.net/secrets/apim-ai-connection-string"
+                     },
+        "name":  "apim-ai-connection-string",
+        "resourceGroup":  "niaid-bpimb-apim-dev-rg",
+        "secret":  true,
+        "tags":  null,
+        "type":  "Microsoft.ApiManagement/service/namedValues",
+        "value":  null
+    },
+    {
+        "displayName":  "niaid-bpimb-apim-dev-ai-connection-string",
+        "id":  "/subscriptions/18fc6b8b-44fa-47d7-ae51-36766ac67165/resourceGroups/niaid-bpimb-apim-dev-rg/providers/Microsoft.ApiManagement/service/niaid-bpimb-apim-dev/namedValues/niaid-bpimb-apim-dev-ai-connection-string",
+        "keyVault":  null,
+        "name":  "niaid-bpimb-apim-dev-ai-connection-string",
+        "resourceGroup":  "niaid-bpimb-apim-dev-rg",
+        "secret":  true,
+        "tags":  null,
+        "type":  "Microsoft.ApiManagement/service/namedValues",
+        "value":  null
+    }
+]

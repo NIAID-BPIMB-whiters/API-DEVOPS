@@ -1,0 +1,13 @@
+﻿{
+  "approvalRequired": false,
+  "description": "This is the Product for Merlin Webservice",
+  "displayName": "MerlinWS",
+  "id": "/subscriptions/18fc6b8b-44fa-47d7-ae51-36766ac67165/resourceGroups/niaid-bpimb-apim-dev-rg/providers/Microsoft.ApiManagement/service/niaid-bpimb-apim-dev/products/merlinws",
+  "name": "merlinws",
+  "resourceGroup": "niaid-bpimb-apim-dev-rg",
+  "state": "notPublished",
+  "subscriptionRequired": true,
+  "subscriptionsLimit": null,
+  "terms": null,
+  "type": "Microsoft.ApiManagement/service/products"
+}

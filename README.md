@@ -54,7 +54,7 @@ This repository implements **GitOps for Azure API Management (APIM)** using Micr
 - ✅ **Environment-Specific Configuration** with Key Vault integration and environment remapping
 - ✅ **Automated API Testing** using ephemeral Azure VMs for internal VNet testing
 - ✅ **API Linting** with Spectral for OpenAPI specification quality
-- ✅ **Internal VNet Support** for secure, private APIM instances
+- ✅ **Flexible Network Configuration** (External DEV for integration, Internal QA/PROD for security)
 - ✅ **Key Vault Integration** for centralized secret management with RBAC
 
 ---
@@ -65,7 +65,7 @@ This repository manages two APIM instances with **four GitHub environments** (tw
 
 | GitHub Environment | Purpose | APIM Service | Resource Group | Network | Secrets |
 |-------------------|---------|--------------|----------------|---------|---------|
-| **apim-bpimb-dev** | Extractor source & DEV deployment | niaid-bpimb-apim-dev | nih-niaid-azurestrides-dev-rg-apim-az | Internal VNet | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME` |
+| **apim-bpimb-dev** | Extractor source & DEV deployment | niaid-bpimb-apim-dev | niaid-bpimb-apim-dev-rg | Internal VNet | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME` |
 | **apim-bpimb-qa** | QA deployment target | niaid-bpimb-apim-qa | nih-niaid-azurestrides-dev-rg-apim-az | Internal VNet | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME`, `APIM_SUBSCRIPTION_KEY` |
 | **apim-bpimb-prod** | PROD deployment target (planned) | TBD | TBD | TBD | TBD |
 | **approve-apim-bpimb-dev** | DEV deployment approval gate | N/A - approval only | N/A | N/A | None (reviewers only) |
@@ -91,20 +91,28 @@ This repository manages two APIM instances with **four GitHub environments** (tw
 
 ### Network Architecture
 
-All APIM instances are deployed in internal VNets with no public access:
+APIM instances are deployed with mixed network configurations for development flexibility:
+
+- **DEV**: External VNet mode (public access for SharePoint integration and Azure portal management)
+- **QA**: Internal VNet mode (private access only)
+- **PROD**: Internal VNet mode (planned, private access only)
 
 ```mermaid
 graph TB
     subgraph Azure["Azure Subscription: 18fc6b8b-44fa-47d7-ae51-36766ac67165"]
-        subgraph VNet["nih-niaid-azurestrides-dev-vnet-apim-az<br/>Internal VNet"]
+        subgraph VNet["nih-niaid-azurestrides-dev-vnet-apim-az<br/>Shared Internal VNet"]
             subgraph Subnet1["APIM Subnet"]
-                DEV_APIM[niaid-bpimb-apim-dev<br/>Private IP: 10.x.x.x<br/>🚀 Extractor Source]
                 QA_APIM[niaid-bpimb-apim-qa<br/>Private IP: 10.x.x.x]
+                DEV_APIM[niaid-bpimb-apim-dev<br/>Public IP: 20.7.242.106<br/>🌐 External Mode]
             end
             
             subgraph Subnet2["Common Services Subnet"]
                 TEST_VM[Ephemeral Test VMs<br/>Created on-demand<br/>Deleted after tests]
             end
+        end
+        
+        subgraph Gateway["Application Gateway"]
+            APP_GW[APIM-APP-GW-V2<br/>Backend Pool: BPIMB DEV + QA<br/>Frontend IP: 10.178.57.9 (Private)]
         end
         
         subgraph Resources["Supporting Resources"]
@@ -125,19 +133,28 @@ graph TB
     PUBLISHER -->|Deploy via Azure API| QA_APIM
     TESTS -->|Create VM in VNet| TEST_VM
     TEST_VM -->|Test via private IP| QA_APIM
+    TEST_VM -->|Test via Gateway| DEV_APIM
+    APP_GW -->|Routes to| DEV_APIM
+    APP_GW -->|Routes to| QA_APIM
+    DEV_APIM -->|Logging| DEV_AI
     QA_APIM -->|Logging| QA_AI
+    DEV_APIM -->|Secrets| DEV_KV
     QA_APIM -->|Secrets| QA_KV
     
-    style DEV_APIM fill:#fff4e6
+    style DEV_APIM fill:#f0f5ff
     style QA_APIM fill:#f0f5ff
+    style APP_GW fill:#fff4e6
     style TEST_VM fill:#f6ffed
 ```
 
 **Key Points**:
-- No public IPs - all APIM instances accessible only within Azure VNet
-- Ephemeral VMs created in same VNet for testing
+- **DEV APIM**: External VNet mode with public access (enables SharePoint integration and Azure portal management)
+- **QA APIM**: Internal VNet mode with private access only
+- **PROD APIM**: Internal VNet mode (planned, private access only)
+- **Application Gateway**: Shared `APIM-APP-GW-V2` routes traffic to both DEV and QA APIMs
+- Ephemeral VMs created in VNet for QA testing
 - GitHub Actions uses Azure CLI/APIs (public endpoints) for management
-- API testing requires VM inside VNet to reach private IPs
+- API testing requires VM inside VNet to reach QA private IPs or Application Gateway for DEV testing
 
 ---
 
@@ -315,8 +332,8 @@ Each API in `apimartifacts/apis/` contains:
   - Resource Group: `niaid-bpimb-apim-dev-rg`
   - Region: `eastus2`
   - SKU: `Developer`
-  - Network: Internal VNet (`nih-niaid-azurestrides-bpimb-dev-apim-az`)
-  - Gateway: `niaid-bpimb-apim-dev.azure-api.net` (Private IP: `10.179.0.4`)
+  - Network: External VNet (public access enabled for SharePoint integration)
+  - Gateway: `niaid-bpimb-apim-dev.azure-api.net` (Public access)
   - Purpose: Source for artifact extraction
 
 - **Application Insights**: `niaid-bpimb-apim-dev-ai`
@@ -756,10 +773,9 @@ gh workflow run test-apis.yaml -f ENVIRONMENT=qa -f TEST_TYPE=full-suite
 **Purpose**: Test internal APIM instances using temporary Azure VMs
 
 **Why Needed**: 
-- APIM instances are in internal VNets (not publicly accessible)
-- No persistent self-hosted runners required
-- Tests from within Azure network boundary
-
+- QA APIM is in internal VNet (not publicly accessible)
+- DEV APIM is externally accessible (public access enabled)
+- Ephemeral VMs required for QA testing within Azure network boundary
 **How It Works**:
 
 ```
@@ -1906,7 +1922,7 @@ This repository implements a **source-target** architecture:
 ```mermaid
 graph TD
     subgraph Source["Source Environment (DEV)"]
-        DEV_SRC[niaid-bpimb-apim-dev<br/>Internal VNet<br/>🚀 Extractor Source]
+        DEV_SRC[niaid-bpimb-apim-dev<br/>External VNet<br/>🚀 Extractor Source]
         DEV_SRC --> |logs to| DEV_AI_SRC
     end
     
@@ -2314,7 +2330,7 @@ For service principals used in GitHub Actions workflows:
 | Environment | Network | Testing Method | Status |
 |-------------|---------|----------------|--------|
 | **DAIDS_DEV** | Internal VNet | Ephemeral Azure VMs | ✅ Operational |
-| **DEV** | Internal VNet | Ephemeral Azure VMs | ✅ Operational |
+| **DEV** | External VNet | Public access (CORS enabled) | ✅ Operational |
 | **QA** | Internal VNet | Ephemeral Azure VMs | ✅ Configured |
 
 ### Test Execution
@@ -2377,8 +2393,10 @@ For service principals used in GitHub Actions workflows:
 
 ### Network Security
 
-- Both DEV and PROD APIM instances are in **Internal VNet** mode
-- Not publicly accessible from internet
+- **DEV APIM**: External VNet mode (public access for SharePoint integration)
+- **QA APIM**: Internal VNet mode (private access only)
+- **PROD APIM**: Internal VNet mode (planned, private access only)
+- CORS enabled on DEV for cross-origin requests from SharePoint
 - Testing requires access from within Azure VNet
 - Developer Portal accessible via custom domain only
 
@@ -2460,10 +2478,59 @@ gh workflow run run-publisher.yaml -f COMMIT_ID_CHOICE="publish-all-artifacts-in
 | "Invalid OpenAPI spec" | Specification format issues | Validate with Spectral locally |
 | "Network timeout" | VNet/subnet misconfiguration | Verify network settings |
 | "Insufficient permissions" | Service principal lacks RBAC | Grant required roles |
+| "500 Internal Server Error" | Backend connectivity issues | Check VNet peering (see below) |
+
+### Backend Connectivity Issues (500 Errors)
+
+**Issue**: APIs return 500 Internal Server Error when connecting to NIH internal backends
+
+**Symptoms**:
+- Works in NIAID-APIM-QA but fails in BPIMB APIMs
+- Backend URL: `ncrmsspoapiqa.niaid.nih.gov`
+- Error occurs at APIM-to-backend routing level
+
+**Root Cause**: Missing VNet peering between BPIMB APIM VNets and NIH hub network
+
+**Working Architecture (NIAID-APIM-QA)**:
+- APIM in: `nih-niaid-azurestrides-dev-vnet-spoke-az`
+- VNet peered to: `nih-cit-cs-vnet-hub-az` ✅
+
+**Broken Architecture (BPIMB APIMs)**:
+- APIMs in separate VNets:
+  - DEV: `nih-niaid-azurestrides-bpimb-dev-apim-az`
+  - QA: `nih-niaid-azurestrides-bpimb-qa-apim-az`
+- No peering to NIH hub ❌
+
+**Solution**: Establish VNet peering (requires CIT team access to NIH hub subscription)
+
+**Status**: Documented in `CIT-VNET-PEERING-REQUEST.md`
+
+**Verification**:
+```bash
+# Check peering status
+az network vnet peering list \
+  --resource-group nih-niaid-azurestrides-dev-rg-admin-az \
+  --vnet-name nih-niaid-azurestrides-bpimb-dev-apim-az \
+  --query "[].{Name:name, State:peeringState}" \
+  --output table
+```
 
 ---
 
-## Production VNet Migration History
+## Network Configuration Changes
+
+### VNet Mode Changes
+
+**December 23-24, 2025**: DEV APIM migrated from External to Internal VNet mode for enhanced security.
+
+**January 29, 2026**: DEV APIM restored to External VNet mode to enable Azure portal management access while maintaining SharePoint integration capabilities.
+
+**Current Configuration**:
+- **DEV APIM**: External VNet mode (public access for SharePoint integration)
+- **QA APIM**: Internal VNet mode (private access only)
+- **PROD APIM**: Internal VNet mode (planned)
+
+### Historical Migration Details
 
 **Migration Completed**: December 23-24, 2025
 

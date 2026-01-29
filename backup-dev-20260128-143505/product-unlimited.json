@@ -1,0 +1,13 @@
+﻿{
+  "approvalRequired": true,
+  "description": "Subscribers have completely unlimited access to the API. Administrator approval is required.",
+  "displayName": "Unlimited",
+  "id": "/subscriptions/18fc6b8b-44fa-47d7-ae51-36766ac67165/resourceGroups/niaid-bpimb-apim-dev-rg/providers/Microsoft.ApiManagement/service/niaid-bpimb-apim-dev/products/unlimited",
+  "name": "unlimited",
+  "resourceGroup": "niaid-bpimb-apim-dev-rg",
+  "state": "published",
+  "subscriptionRequired": true,
+  "subscriptionsLimit": 1,
+  "terms": null,
+  "type": "Microsoft.ApiManagement/service/products"
+}

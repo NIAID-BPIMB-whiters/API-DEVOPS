@@ -1,0 +1,96 @@
+﻿{
+  "additionalLocations": null,
+  "apiVersionConstraint": {
+    "minApiVersion": null
+  },
+  "certificates": null,
+  "createdAtUtc": "2025-11-10T18:12:57.112586+00:00",
+  "customProperties": {
+    "Microsoft.WindowsAzure.ApiManagement.Gateway.Protocols.Server.Http2": "False",
+    "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Backend.Protocols.Ssl30": "False",
+    "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Backend.Protocols.Tls10": "False",
+    "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Backend.Protocols.Tls11": "False",
+    "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Ciphers.TripleDes168": "False",
+    "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Ssl30": "False",
+    "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls10": "False",
+    "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls11": "False"
+  },
+  "developerPortalUrl": "https://niaid-bpimb-apim-dev.developer.azure-api.net",
+  "disableGateway": false,
+  "enableClientCertificate": null,
+  "etag": "AAAAAAEeRRM=",
+  "gatewayRegionalUrl": "https://niaid-bpimb-apim-dev-eastus2-01.regional.azure-api.net",
+  "gatewayUrl": "https://niaid-bpimb-apim-dev.azure-api.net",
+  "hostnameConfigurations": [
+    {
+      "certificate": null,
+      "certificatePassword": null,
+      "certificateSource": "BuiltIn",
+      "certificateStatus": null,
+      "defaultSslBinding": true,
+      "encodedCertificate": null,
+      "hostName": "niaid-bpimb-apim-dev.azure-api.net",
+      "identityClientId": null,
+      "keyVaultId": null,
+      "negotiateClientCertificate": false,
+      "type": "Proxy"
+    }
+  ],
+  "id": "/subscriptions/18fc6b8b-44fa-47d7-ae51-36766ac67165/resourceGroups/niaid-bpimb-apim-dev-rg/providers/Microsoft.ApiManagement/service/niaid-bpimb-apim-dev",
+  "identity": {
+    "principalId": "aed41564-5720-465c-b717-c842783c955b",
+    "tenantId": "14b77578-9773-42d5-8507-251ca2dc2b06",
+    "type": "SystemAssigned",
+    "userAssignedIdentities": null
+  },
+  "location": "East US 2",
+  "managementApiUrl": "https://niaid-bpimb-apim-dev.management.azure-api.net",
+  "name": "niaid-bpimb-apim-dev",
+  "natGatewayState": "Disabled",
+  "notificationSenderEmail": "NIAIDOCICBBPIMBAdmins@mail.nih.gov",
+  "outboundPublicIpAddresses": [
+    "20.69.202.202"
+  ],
+  "platformVersion": "stv2",
+  "portalUrl": "https://niaid-bpimb-apim-dev.portal.azure-api.net",
+  "privateEndpointConnections": null,
+  "privateIpAddresses": null,
+  "provisioningState": "Succeeded",
+  "publicIpAddressId": null,
+  "publicIpAddresses": [
+    "20.69.202.202"
+  ],
+  "publicNetworkAccess": "Enabled",
+  "publisherEmail": "NIAIDOCICBBPIMBAdmins@mail.nih.gov",
+  "publisherName": "NIAID BPIMB",
+  "resourceGroup": "niaid-bpimb-apim-dev-rg",
+  "restore": null,
+  "scmUrl": "https://niaid-bpimb-apim-dev.scm.azure-api.net",
+  "sku": {
+    "capacity": 1,
+    "name": "Developer"
+  },
+  "systemData": {
+    "createdAt": "2025-11-10T18:12:57.059625+00:00",
+    "createdBy": "whiters@nih.gov",
+    "createdByType": "User",
+    "lastModifiedAt": "2026-01-28T16:22:25.295087+00:00",
+    "lastModifiedBy": "whiters@nih.gov",
+    "lastModifiedByType": "User"
+  },
+  "tags": {
+    "CreatedBy": "APIops",
+    "Environment": "dev",
+    "ManagedBy": "NIAID OCICB BPIMB Admins <NIAIDOCICBBPIMBAdmins@mail.nih.gov>",
+    "Project": "NIAID-BPIMB-APIM"
+  },
+  "targetProvisioningState": "",
+  "type": "Microsoft.ApiManagement/service",
+  "virtualNetworkConfiguration": {
+    "subnetResourceId": "/subscriptions/18fc6b8b-44fa-47d7-ae51-36766ac67165/resourceGroups/nih-niaid-azurestrides-dev-rg-admin-az/providers/Microsoft.Network/virtualNetworks/nih-niaid-azurestrides-bpimb-dev-apim-az/subnets/dev-apim-subnet",
+    "subnetname": null,
+    "vnetid": "00000000-0000-0000-0000-000000000000"
+  },
+  "virtualNetworkType": "External",
+  "zones": null
+}
