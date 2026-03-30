@@ -22,6 +22,8 @@ jobs:
     name: Check DEV Environment
     runs-on: ubuntu-latest
     environment: apim-bpimb-dev
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     
     steps:
       - name: Azure Login
@@ -176,6 +178,8 @@ jobs:
     name: Check QA Environment
     runs-on: ubuntu-latest
     environment: apim-bpimb-qa
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     
     steps:
       - name: Azure Login
@@ -330,6 +334,8 @@ jobs:
     name: Check DAIDS_DEV Environment
     runs-on: ubuntu-latest
     environment: apim-daids-connect
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     
     steps:
       - name: Azure Login
