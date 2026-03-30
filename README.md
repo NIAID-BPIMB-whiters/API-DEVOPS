@@ -61,15 +61,17 @@ This repository implements **GitOps for Azure API Management (APIM)** using Micr
 
 ## Environments
 
-This repository manages two APIM instances with **four GitHub environments** (two credential environments + two approval gates), with PROD deployment planned for future implementation:
+This repository manages three APIM instances with **seven GitHub environments** (four credential environments + three approval gates), with PROD deployment planned for future implementation:
 
 | GitHub Environment | Purpose | APIM Service | Resource Group | Network | Secrets |
 |-------------------|---------|--------------|----------------|---------|---------|
-| **apim-bpimb-dev** | Extractor source & DEV deployment | niaid-bpimb-apim-dev | niaid-bpimb-apim-dev-rg | Internal VNet | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME` |
-| **apim-bpimb-qa** | QA deployment target | niaid-bpimb-apim-qa | nih-niaid-azurestrides-dev-rg-apim-az | Internal VNet | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME`, `APIM_SUBSCRIPTION_KEY` |
+| **apim-bpimb-dev** | Extractor source & DEV deployment | niaid-bpimb-apim-dev | niaid-bpimb-apim-dev-rg | External VNet | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME` |
+| **apim-bpimb-qa** | QA deployment target | niaid-bpimb-apim-qa | niaid-bpimb-apim-qa-rg | Internal VNet | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `API_MANAGEMENT_SERVICE_NAME`, `APIM_SUBSCRIPTION_KEY` |
+| **apim-bpimb-sb** | Sandbox development environment | niaid-bpimb-apim-sb | niaid-bpimb-apim-sb-rg | None (Public) | TBD |
 | **apim-bpimb-prod** | PROD deployment target (planned) | TBD | TBD | TBD | TBD |
 | **approve-apim-bpimb-dev** | DEV deployment approval gate | N/A - approval only | N/A | N/A | None (reviewers only) |
 | **approve-apim-bpimb-qa** | QA deployment approval gate | N/A - approval only | N/A | N/A | None (reviewers only) |
+| **approve-apim-bpimb-sb** | Sandbox deployment approval gate (planned) | N/A - approval only | N/A | N/A | None (reviewers only) |
 
 ### Environment Types
 
@@ -94,7 +96,8 @@ This repository manages two APIM instances with **four GitHub environments** (tw
 APIM instances are deployed with mixed network configurations for development flexibility:
 
 - **DEV**: External VNet mode (public access for SharePoint integration and Azure portal management)
-- **QA**: Internal VNet mode (private access only)
+- **QA**: Internal VNet mode (private access only) - **✅ COMPLETED MIGRATION**
+- **Sandbox**: No VNet (public access for development ease)
 - **PROD**: Internal VNet mode (planned, private access only)
 
 ```mermaid

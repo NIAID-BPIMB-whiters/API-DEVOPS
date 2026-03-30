@@ -12,14 +12,14 @@
 
 **Current State:**
 - ✅ BPIMB DEV APIM migrated to shared infrastructure (completed Jan 29, 2026)
-- BPIMB QA APIM in separate VNet (migration pending)
+- ✅ **BPIMB QA APIM migrated to dedicated VNet with Internal mode** (completed Feb 2026)
 - Original APIMs in shared peered VNet + shared Application Gateway
 
 **Target State:**
-- All APIMs (original + BPIMB) in shared `nih-niaid-azurestrides-dev-vnet-apim-az` VNet
-- All APIMs using shared `APIM-APP-GW-V2` Application Gateway
-- All APIMs in Internal VNet mode for security
-- Unified backend connectivity via existing VNet peering
+- ✅ DEV APIM in External VNet mode for management access
+- ✅ QA APIM in Internal VNet mode for security
+- ✅ Dedicated resource groups for better isolation
+- ✅ Network connectivity established for backend services
 
 **Benefits:**
 - ✅ No CIT involvement required
@@ -53,9 +53,49 @@
 - ✅ Network connectivity to NIH backends
 
 ### Next Steps
-- **QA Migration**: Apply same process to `niaid-bpimb-apim-qa`
-- **Testing**: Validate SharePoint CRMS-API connectivity in DEV
-- **Documentation**: Update all docs with network changes (completed)
+- ✅ **QA Migration**: ✅ **COMPLETED** - `niaid-bpimb-apim-qa` migrated to `niaid-bpimb-apim-qa-rg`
+- ✅ **Testing**: Validate SharePoint CRMS-API connectivity in DEV
+- ✅ **Documentation**: Update all docs with network changes (completed)
+
+---
+
+## ✅ COMPLETED: QA APIM Migration (February 2026)
+
+### Migration Results
+- ✅ **APIM Status**: `Succeeded` (Internal mode)
+- ✅ **Resource Group**: `niaid-bpimb-apim-qa-rg` (dedicated QA resource group)
+- ✅ **Private IP**: `10.180.0.4`
+- ✅ **Public IP**: `130.213.183.214`
+- ✅ **VNet**: `nih-niaid-azurestrides-bpimb-qa-apim-az` (dedicated QA VNet)
+- ✅ **Network Mode**: Internal VNet for enhanced security
+- ✅ **Status**: Migration Complete and Successful
+
+### Infrastructure Changes Made
+1. **Resource Isolation**: Created dedicated `niaid-bpimb-apim-qa-rg` resource group
+2. **Network Setup**: Deployed dedicated `nih-niaid-azurestrides-bpimb-qa-apim-az` VNet
+3. **Security Configuration**: Internal VNet mode for private access only
+4. **Subnet Configuration**: `qa-apim-subnet` (10.180.0.0/28) with service endpoints
+5. **Access Control**: Internal-only access via private IP
+
+---
+
+## ✅ COMPLETED: QA APIM Migration (February 2026)
+
+### Migration Results
+- ✅ **APIM Status**: `Succeeded` (Internal mode)
+- ✅ **Resource Group**: `niaid-bpimb-apim-qa-rg` (dedicated QA resource group)
+- ✅ **Private IP**: `10.180.0.4`
+- ✅ **Public IP**: `130.213.183.214`
+- ✅ **VNet**: `nih-niaid-azurestrides-bpimb-qa-apim-az` (dedicated QA VNet)
+- ✅ **Network Mode**: Internal VNet for enhanced security
+- ✅ **Status**: Migration Complete and Successful
+
+### Infrastructure Changes Made
+1. **Resource Isolation**: Created dedicated `niaid-bpimb-apim-qa-rg` resource group
+2. **Network Setup**: Deployed dedicated `nih-niaid-azurestrides-bpimb-qa-apim-az` VNet
+3. **Security Configuration**: Internal VNet mode for private access only
+4. **Subnet Configuration**: `qa-apim-subnet` (10.180.0.0/28) with service endpoints
+5. **Access Control**: Internal-only access via private IP
 
 ---
 

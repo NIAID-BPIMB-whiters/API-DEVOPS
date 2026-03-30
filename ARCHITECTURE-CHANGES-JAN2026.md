@@ -64,32 +64,34 @@ Initially migrated `niaid-bpimb-apim-dev` from External to Internal VNet mode to
 
 ---
 
-## 🎯 Initiative 1: Create Sandbox Environment
+## ✅ COMPLETED: Initiative 1 - Create Sandbox Environment
+
+**Date**: January 13, 2026  
+**Status**: ✅ **COMPLETED**
 
 ### Objective
 Create `niaid-bpimb-apim-sb` as a sandbox environment mirroring DEV architecture for POC work with promotion path to DEV.
 
-### Resources to Create
+### Resources Created
 
 #### Azure Resources
-- **Resource Group**: `niaid-bpimb-apim-sb-rg`
-- **APIM Service**: `niaid-bpimb-apim-sb`
-- **Subscription**: NIH.NIAID.AzureSTRIDES (same as DEV/QA)
-- **Location**: Same as DEV (likely East US)
-- **Tier**: Developer or Basic (for cost optimization)
+- ✅ **Resource Group**: `niaid-bpimb-apim-sb-rg`
+- ✅ **APIM Service**: `niaid-bpimb-apim-sb`
+- ✅ **Subscription**: NIH.NIAID.AzureSTRIDES (same as DEV/QA)
+- ✅ **Location**: East US
+- ✅ **Tier**: Developer
+- ✅ **Public IP**: `128.203.83.44`
+- ✅ **Network Mode**: None (public access for development ease)
 
 #### Networking
-- [ ] VLAN/VNet configuration
-  - Option A: Create new subnet in existing `nih-niaid-azurestrides-dev-vnet-apim-az`
-  - Option B: Create dedicated VNet (if isolation required)
-  - **Recommendation**: Use existing VNet with new subnet to mirror DEV architecture
-- [ ] Private IP address allocation
-- [ ] Network security group rules
-- [ ] DNS configuration
-- [ ] Internal gateway URL: `niaid-bpimb-apim-sb.azure-api.net`
+- ✅ **Network Configuration**: No VNet (public access chosen for development simplicity)
+- ✅ **Public IP**: `128.203.83.44`
+- ✅ **Gateway URL**: `niaid-bpimb-apim-sb.azure-api.net`
+- ✅ **Management URL**: `niaid-bpimb-apim-sb.management.azure-api.net`
+- ✅ **DNS Configuration**: Default Azure API Management DNS
 
 #### Service Principal
-- [ ] Create Azure AD App Registration: `apiops-sb-sp`
+- ⚠️ **NEXT STEP**: Create Azure AD App Registration: `apiops-sb-sp`
 - [ ] Create client secret (store in Key Vault)
 - [ ] Assign RBAC permissions:
   - `API Management Service Contributor` on `niaid-bpimb-apim-sb`
@@ -98,7 +100,7 @@ Create `niaid-bpimb-apim-sb` as a sandbox environment mirroring DEV architecture
 - [ ] Document credentials in secure location
 
 #### GitHub Secrets/Environments
-- [ ] Create GitHub environment: `apim-bpimb-sb`
+- ⚠️ **NEXT STEP**: Create GitHub environment: `apim-bpimb-sb`
 - [ ] Add secrets to `apim-bpimb-sb` environment:
   - `AZURE_CLIENT_ID` (from SP)
   - `AZURE_CLIENT_SECRET` (from SP)
@@ -107,11 +109,11 @@ Create `niaid-bpimb-apim-sb` as a sandbox environment mirroring DEV architecture
   - `AZURE_RESOURCE_GROUP_NAME` = `niaid-bpimb-apim-sb-rg`
   - `API_MANAGEMENT_SERVICE_NAME` = `niaid-bpimb-apim-sb`
   - `APIM_SUBSCRIPTION_KEY` (for testing)
-- [ ] Create approval environment: `approve-apim-bpimb-sb`
+- ⚠️ **NEXT STEP**: Create approval environment: `approve-apim-bpimb-sb`
 - [ ] Configure required reviewers for sandbox approval
 
 #### Configuration Files
-- [ ] Create `configuration.sandbox.yaml` (copy from `configuration.dev.yaml`)
+- ⚠️ **NEXT STEP**: Create `configuration.sandbox.yaml` (copy from `configuration.dev.yaml`)
 - [ ] Update environment-specific settings:
   - Service name: `niaid-bpimb-apim-sb`
   - Resource group: `niaid-bpimb-apim-sb-rg`
